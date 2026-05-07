@@ -1,7 +1,7 @@
 services:
   - type: web
+    runtime: node
     name: khata-app-api
-    env: node
     plan: free
     rootDir: .
     buildCommand: npm install && npm run build
@@ -12,7 +12,8 @@ services:
       - key: CLIENT_URL
         value: https://khata-app-web.onrender.com
 
-  - type: static_site
+  - type: web
+    runtime: static
     name: khata-app-web
     rootDir: client
     buildCommand: npm install && npm run build
