@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Khata App</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Khata Manager</h1>
+      <p>Hinglish UI: customers ka khata, entries, aur aging summary.</p>
+    </header>
+
+    <main>
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Customer List</h2>
+          <button id="download-all" type="button" class="btn-secondary">
+            Download All (CSV)
+          </button>
+        </div>
+        <form id="customer-form" class="form-row">
+          <input id="customer-name" type="text" placeholder="Customer name" />
+          <input id="customer-phone" type="text" placeholder="Phone (optional)" />
+          <button type="submit">Add Customer</button>
+        </form>
+        <ul id="customer-list" class="list"></ul>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Khata Entry</h2>
+          <button id="download-customer" type="button" class="btn-secondary">
+            Download Customer (CSV)
+          </button>
+        </div>
+        <div class="summary" id="customer-summary">Select a customer.</div>
+        <form id="payment-form" class="form-row">
+          <input id="payment-amount" type="number" step="0.01" placeholder="Payment amount" />
+          <input id="payment-note" type="text" placeholder="Payment note (optional)" />
+          <button type="submit">Add Payment</button>
+        </form>
+        <form id="entry-form" class="form-grid">
+          <select id="entry-type">
+            <option value="debit">Udhaar (Debit)</option>
+            <option value="credit">Payment (Credit)</option>
+          </select>
+          <input id="item-name" type="text" placeholder="Item name" />
+          <input id="item-qty" type="number" step="0.01" placeholder="Quantity" />
+          <input id="item-rate" type="number" step="0.01" placeholder="Rate (optional)" />
+          <input id="item-note" type="text" placeholder="Note" />
+          <button type="submit">Add Entry</button>
+        </form>
+
+        <div class="aging" id="aging-summary"></div>
+        <h3>Ledger Entries</h3>
+        <table id="ledger-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Type</th>
+              <th>Item</th>
+              <th>Qty</th>
+              <th>Rate</th>
+              <th>Amount</th>
+              <th>Note</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+          <tfoot>
+            <tr class="total-row">
+              <td colspan="3">Total</td>
+              <td id="total-qty">0</td>
+              <td>-</td>
+              <td id="total-amount">0.00</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>

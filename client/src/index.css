@@ -1,0 +1,26 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", Tahoma, sans-serif;
+  background: #f4f5f7;
+  color: #1f2430;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0 0 8px;
+  color: #0f172a;
+  font-weight: 600;
+}
+
+p {
+  margin: 0;
+}
