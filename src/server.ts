@@ -12,6 +12,7 @@ import {
   getCustomerSummary,
   getLedgerAging,
   getLedgerEntries,
+  initDb,
   listBrands,
   listCategories,
   listCustomers
@@ -59,13 +60,13 @@ if (process.env.NODE_ENV === "production") {
   });
 }
 
-app.get("/api/customers", (_req, res) => {
-  res.json(listCustomers());
+app.get("/api/customers", async (_req, res) => {
+  res.json(await listCustomers());
 });
 
-app.post("/api/customers", (req, res) => {
+app.post("/api/customers", async (req, res) => {
   try {
-    const customer = addCustomer({
+    const customer = await addCustomer({
       name: String(req.body?.name || ""),
       phone: req.body?.phone ? String(req.body.phone) : undefined
     });
@@ -75,16 +76,16 @@ app.post("/api/customers", (req, res) => {
   }
 });
 
-app.get("/api/customers/:id/entries", (req, res) => {
+app.get("/api/customers/:id/entries", async (req, res) => {
   const customerId = Number(req.params.id);
   if (!Number.isFinite(customerId)) {
     res.status(400).json({ error: "Invalid customer id" });
     return;
   }
-  res.json(getLedgerEntries(customerId));
+  res.json(await getLedgerEntries(customerId));
 });
 
-app.post("/api/customers/:id/entries", (req, res) => {
+app.post("/api/customers/:id/entries", async (req, res) => {
   const customerId = Number(req.params.id);
   if (!Number.isFinite(customerId)) {
     res.status(400).json({ error: "Invalid customer id" });
@@ -92,7 +93,7 @@ app.post("/api/customers/:id/entries", (req, res) => {
   }
 
   try {
-    const entry = addLedgerEntry({
+    const entry = await addLedgerEntry({
       customerId,
       itemId: req.body?.itemId ? Number(req.body.itemId) : null,
       itemName: String(req.body?.itemName || ""),
@@ -110,31 +111,31 @@ app.post("/api/customers/:id/entries", (req, res) => {
   }
 });
 
-app.get("/api/customers/:id/summary", (req, res) => {
+app.get("/api/customers/:id/summary", async (req, res) => {
   const customerId = Number(req.params.id);
   if (!Number.isFinite(customerId)) {
     res.status(400).json({ error: "Invalid customer id" });
     return;
   }
-  res.json(getCustomerSummary(customerId));
+  res.json(await getCustomerSummary(customerId));
 });
 
-app.get("/api/customers/:id/aging", (req, res) => {
+app.get("/api/customers/:id/aging", async (req, res) => {
   const customerId = Number(req.params.id);
   if (!Number.isFinite(customerId)) {
     res.status(400).json({ error: "Invalid customer id" });
     return;
   }
-  res.json(getLedgerAging(customerId));
+  res.json(await getLedgerAging(customerId));
 });
 
-app.get("/api/categories", (_req, res) => {
-  res.json(listCategories());
+app.get("/api/categories", async (_req, res) => {
+  res.json(await listCategories());
 });
 
-app.post("/api/categories", (req, res) => {
+app.post("/api/categories", async (req, res) => {
   try {
-    const category = addCategory({
+    const category = await addCategory({
       name: String(req.body?.name || "")
     });
     res.status(201).json(category);
@@ -143,7 +144,7 @@ app.post("/api/categories", (req, res) => {
   }
 });
 
-app.get("/api/brands", (req, res) => {
+app.get("/api/brands", async (req, res) => {
   const categoryId = req.query.categoryId
     ? Number(req.query.categoryId)
     : null;
@@ -151,12 +152,12 @@ app.get("/api/brands", (req, res) => {
     res.status(400).json({ error: "Invalid category id" });
     return;
   }
-  res.json(listBrands(categoryId));
+  res.json(await listBrands(categoryId));
 });
 
-app.post("/api/brands", (req, res) => {
+app.post("/api/brands", async (req, res) => {
   try {
-    const brand = addBrand({
+    const brand = await addBrand({
       name: String(req.body?.name || ""),
       categoryId: req.body?.categoryId ? Number(req.body.categoryId) : null
     });
@@ -166,7 +167,7 @@ app.post("/api/brands", (req, res) => {
   }
 });
 
-app.get("/api/items", (req, res) => {
+app.get("/api/items", async (req, res) => {
   const categoryId = req.query.categoryId
     ? Number(req.query.categoryId)
     : null;
@@ -179,12 +180,12 @@ app.get("/api/items", (req, res) => {
     res.status(400).json({ error: "Invalid brand id" });
     return;
   }
-  res.json(getAllItems({ categoryId, brandId }));
+  res.json(await getAllItems({ categoryId, brandId }));
 });
 
-app.post("/api/items", (req, res) => {
+app.post("/api/items", async (req, res) => {
   try {
-    const item = addItem({
+    const item = await addItem({
       name: String(req.body?.name || ""),
       categoryId: Number(req.body?.categoryId || 0),
       brandId: Number(req.body?.brandId || 0),
@@ -199,14 +200,14 @@ app.post("/api/items", (req, res) => {
   }
 });
 
-app.put("/api/items/:id", (req, res) => {
+app.put("/api/items/:id", async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) {
     res.status(400).json({ error: "Invalid item id" });
     return;
   }
   try {
-    const item = addItem({
+    const item = await addItem({
       id: itemId,
       name: String(req.body?.name || ""),
       categoryId: Number(req.body?.categoryId || 0),
@@ -222,24 +223,24 @@ app.put("/api/items/:id", (req, res) => {
   }
 });
 
-app.delete("/api/items/:id", (req, res) => {
+app.delete("/api/items/:id", async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) {
     res.status(400).json({ error: "Invalid item id" });
     return;
   }
-  deleteItem(itemId);
+  await deleteItem(itemId);
   res.status(204).send();
 });
 
-app.get("/api/export/customers.csv", (_req, res) => {
-  const customers = listCustomers();
+app.get("/api/export/customers.csv", async (_req, res) => {
+  const customers = await listCustomers();
   const rows: Array<Array<string | number>> = [
     ["Customer Id", "Name", "Phone", "Total Debit", "Total Credit", "Balance"]
   ];
 
-  customers.forEach((customer) => {
-    const summary = getCustomerSummary(customer.id);
+  for (const customer of customers) {
+    const summary = await getCustomerSummary(customer.id);
     rows.push([
       customer.id,
       customer.name,
@@ -248,7 +249,7 @@ app.get("/api/export/customers.csv", (_req, res) => {
       summary.totalCredit,
       summary.balance
     ]);
-  });
+  }
 
   const csv = rows
     .map((row) => row.map((cell) => toCsvValue(cell)).join(","))
@@ -262,16 +263,16 @@ app.get("/api/export/customers.csv", (_req, res) => {
   res.send(csv);
 });
 
-app.get("/api/export/customers/:id/ledger.csv", (req, res) => {
+app.get("/api/export/customers/:id/ledger.csv", async (req, res) => {
   const customerId = Number(req.params.id);
   if (!Number.isFinite(customerId)) {
     res.status(400).json({ error: "Invalid customer id" });
     return;
   }
 
-  const customers = listCustomers();
+  const customers = await listCustomers();
   const customer = customers.find((item) => item.id === customerId);
-  const entries = getLedgerEntries(customerId);
+  const entries = await getLedgerEntries(customerId);
   const rows: Array<Array<string | number>> = [
     [
       "Customer Id",
@@ -312,6 +313,18 @@ app.get("/api/export/customers/:id/ledger.csv", (req, res) => {
   res.send(csv);
 });
 
-app.listen(port, () => {
-  console.log(`Khata web app running on http://localhost:${port}`);
-});
+initDb()
+  .then(() => {
+    app.listen(port, () => {
+      console.log(`Khata web app running on http://localhost:${port}`);
+      if (process.env.DATABASE_URL) {
+        console.log("Database mode: Postgres");
+      } else {
+        console.log("Database mode: SQLite");
+      }
+    });
+  })
+  .catch((error) => {
+    console.error("Failed to initialize database", error);
+    process.exit(1);
+  });
