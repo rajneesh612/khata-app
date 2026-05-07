@@ -46,11 +46,20 @@ type Item = {
   unit: string | null
 }
 
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+
+const apiUrl = (path: string) => {
+  if (!apiBaseUrl) {
+    return path
+  }
+  return `${apiBaseUrl}${path}`
+}
+
 const requestJson = async <T,>(
   url: string,
   options?: RequestInit
 ): Promise<T> => {
-  const response = await fetch(url, options)
+  const response = await fetch(apiUrl(url), options)
   const data = await response.json()
   if (!response.ok) {
     throw new Error(data.error || 'Request failed')
@@ -528,7 +537,7 @@ function App() {
     const ok = window.confirm('Delete this item?')
     if (!ok) return
     try {
-      await fetch(`/api/items/${itemId}`, { method: 'DELETE' })
+      await fetch(apiUrl(`/api/items/${itemId}`), { method: 'DELETE' })
       await loadItems()
       await loadAdminItems()
     } catch (error) {
@@ -562,7 +571,7 @@ function App() {
             <button
               type="button"
               className="btn-secondary"
-              onClick={() => (window.location.href = '/api/export/customers.csv')}
+              onClick={() => (window.location.href = apiUrl('/api/export/customers.csv'))}
             >
               Download All (CSV)
             </button>
@@ -629,7 +638,9 @@ function App() {
                   alert('Select a customer first')
                   return
                 }
-                window.location.href = `/api/export/customers/${selectedCustomerId}/ledger.csv`
+                window.location.href = apiUrl(
+                  `/api/export/customers/${selectedCustomerId}/ledger.csv`
+                )
               }}
             >
               Download Customer (CSV)

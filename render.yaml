@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: khata-app-api
+    env: node
+    plan: free
+    rootDir: .
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: CLIENT_URL
+        value: https://khata-app-web.onrender.com
+
+  - type: static_site
+    name: khata-app-web
+    rootDir: client
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: https://khata-app-api.onrender.com
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

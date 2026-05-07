@@ -27,11 +27,23 @@ const toCsvValue = (value: string | number | null): string => {
 
 const app = express();
 const port = Number(process.env.PORT) || 5174;
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:5174",
+  process.env.CLIENT_URL
+].filter(Boolean) as string[];
 
 app.use(express.json());
 app.use(
   cors({
-    origin: "http://localhost:5173"
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error("Not allowed by CORS"));
+    }
   })
 );
 
