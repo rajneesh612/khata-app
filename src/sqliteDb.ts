@@ -7,6 +7,7 @@ import type {
   AddCustomerPayload,
   AddItemPayload,
   AddLedgerEntryPayload,
+  AuditLog,
   Brand,
   Category,
   Customer,
@@ -80,6 +81,15 @@ const getDb = (): Database.Database => {
       UNIQUE (name, brand_id),
       FOREIGN KEY (category_id) REFERENCES categories(id),
       FOREIGN KEY (brand_id) REFERENCES brands(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS audit_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      action TEXT NOT NULL,
+      entity_type TEXT NOT NULL,
+      entity_id INTEGER,
+      summary TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
 
@@ -263,6 +273,20 @@ export const initDb = (): void => {
   getDb();
 };
 
+const writeAuditLog = (payload: {
+  action: string;
+  entityType: string;
+  entityId?: number | null;
+  summary: string;
+}): void => {
+  const database = getDb();
+  database
+    .prepare(
+      "INSERT INTO audit_logs (action, entity_type, entity_id, summary) VALUES (?, ?, ?, ?)"
+    )
+    .run(payload.action, payload.entityType, payload.entityId ?? null, payload.summary);
+};
+
 export const listCustomers = (): Customer[] => {
   const database = getDb();
   const stmt = database.prepare(
@@ -282,9 +306,18 @@ export const addCustomer = (payload: AddCustomerPayload): Customer => {
     .prepare("INSERT INTO customers (name, phone) VALUES (?, ?)")
     .run(name, payload.phone?.trim() || null);
 
-  return database
+  const customer = database
     .prepare("SELECT id, name, phone, created_at FROM customers WHERE id = ?")
     .get(info.lastInsertRowid) as Customer;
+
+  writeAuditLog({
+    action: "create",
+    entityType: "customer",
+    entityId: customer.id,
+    summary: `Customer created: ${customer.name}${customer.phone ? ` (${customer.phone})` : ""}`
+  });
+
+  return customer;
 };
 
 export const addLedgerEntry = (payload: AddLedgerEntryPayload): LedgerEntry => {
@@ -322,9 +355,18 @@ export const addLedgerEntry = (payload: AddLedgerEntryPayload): LedgerEntry => {
       payload.note?.trim() || null
     );
 
-  return database
+  const entry = database
     .prepare("SELECT * FROM ledger_entries WHERE id = ?")
     .get(info.lastInsertRowid) as LedgerEntry;
+
+  writeAuditLog({
+    action: "create",
+    entityType: "ledger_entry",
+    entityId: entry.id,
+    summary: `${entry.entry_type} entry for customer #${entry.customer_id}: ${entry.item_name} x ${entry.quantity} amount ${entry.amount.toFixed(2)}${entry.affects_balance === 0 ? " (cash)" : ""}`
+  });
+
+  return entry;
 };
 
 export const getLedgerEntries = (customerId: number): LedgerEntry[] => {
@@ -352,9 +394,18 @@ export const addCategory = (payload: AddCategoryPayload): Category => {
   const info = database
     .prepare("INSERT INTO categories (name) VALUES (?)")
     .run(name);
-  return database
+  const category = database
     .prepare("SELECT id, name, created_at FROM categories WHERE id = ?")
     .get(info.lastInsertRowid) as Category;
+
+  writeAuditLog({
+    action: "create",
+    entityType: "category",
+    entityId: category.id,
+    summary: `Category created: ${category.name}`
+  });
+
+  return category;
 };
 
 export const listBrands = (categoryId?: number | null): Brand[] => {
@@ -383,9 +434,18 @@ export const addBrand = (payload: AddBrandPayload): Brand => {
   const info = database
     .prepare("INSERT INTO brands (name, category_id) VALUES (?, ?)")
     .run(name, payload.categoryId);
-  return database
+  const brand = database
     .prepare("SELECT id, name, category_id, created_at FROM brands WHERE id = ?")
     .get(info.lastInsertRowid) as Brand;
+
+  writeAuditLog({
+    action: "create",
+    entityType: "brand",
+    entityId: brand.id,
+    summary: `Brand created: ${brand.name} in category #${brand.category_id}`
+  });
+
+  return brand;
 };
 
 export const getAllItems = (filters?: ItemFilters): Item[] => {
@@ -434,11 +494,20 @@ export const addItem = (payload: AddItemPayload): Item => {
         payload.unit ?? null,
         payload.id
       );
-    return database
+    const updatedItem = database
       .prepare(
         "SELECT id, name, category_id, brand_id, default_rate, unit, created_at FROM items WHERE id = ?"
       )
       .get(payload.id) as Item;
+
+    writeAuditLog({
+      action: "update",
+      entityType: "item",
+      entityId: updatedItem.id,
+      summary: `Item updated: ${updatedItem.name} rate ${updatedItem.default_rate ?? "-"} unit ${updatedItem.unit ?? "-"}`
+    });
+
+    return updatedItem;
   }
 
   const info = database
@@ -453,16 +522,45 @@ export const addItem = (payload: AddItemPayload): Item => {
       payload.unit ?? null
     );
 
-  return database
+  const item = database
     .prepare(
       "SELECT id, name, category_id, brand_id, default_rate, unit, created_at FROM items WHERE id = ?"
     )
     .get(info.lastInsertRowid) as Item;
+
+  writeAuditLog({
+    action: "create",
+    entityType: "item",
+    entityId: item.id,
+    summary: `Item created: ${item.name} rate ${item.default_rate ?? "-"} unit ${item.unit ?? "-"}`
+  });
+
+  return item;
 };
 
 export const deleteItem = (itemId: number): void => {
   const database = getDb();
+  const item = database
+    .prepare("SELECT id, name FROM items WHERE id = ?")
+    .get(itemId) as { id: number; name: string } | undefined;
   database.prepare("DELETE FROM items WHERE id = ?").run(itemId);
+  if (item) {
+    writeAuditLog({
+      action: "delete",
+      entityType: "item",
+      entityId: item.id,
+      summary: `Item deleted: ${item.name}`
+    });
+  }
+};
+
+export const listAuditLogs = (limit = 50): AuditLog[] => {
+  const database = getDb();
+  return database
+    .prepare(
+      "SELECT id, action, entity_type, entity_id, summary, created_at FROM audit_logs ORDER BY datetime(created_at) DESC LIMIT ?"
+    )
+    .all(limit) as AuditLog[];
 };
 
 export const getCustomerSummary = (customerId: number): CustomerSummary => {

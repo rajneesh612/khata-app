@@ -57,6 +57,15 @@ export type LedgerAging = {
   older: number;
 };
 
+export type AuditLog = {
+  id: number;
+  action: string;
+  entity_type: string;
+  entity_id: number | null;
+  summary: string;
+  created_at: string;
+};
+
 export type AddCustomerPayload = {
   name: string;
   phone?: string;

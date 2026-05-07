@@ -7,6 +7,7 @@ export type {
   AddCustomerPayload,
   AddItemPayload,
   AddLedgerEntryPayload,
+  AuditLog,
   Brand,
   Category,
   Customer,
@@ -77,6 +78,10 @@ export const addItem = async (...args: Parameters<typeof postgresDb.addItem>) =>
 
 export const deleteItem = async (...args: Parameters<typeof postgresDb.deleteItem>) => {
   return usePostgres ? postgresDb.deleteItem(...args) : sqliteDb.deleteItem(...args);
+};
+
+export const listAuditLogs = async (...args: Parameters<typeof postgresDb.listAuditLogs>) => {
+  return usePostgres ? postgresDb.listAuditLogs(...args) : sqliteDb.listAuditLogs(...args);
 };
 
 export const getCustomerSummary = async (

@@ -5,6 +5,7 @@ import type {
   AddCustomerPayload,
   AddItemPayload,
   AddLedgerEntryPayload,
+  AuditLog,
   Brand,
   Category,
   Customer,
@@ -207,6 +208,30 @@ const mapLedgerEntry = (row: {
   created_at: mapTimestamp(row.created_at)
 });
 
+const mapAuditLog = (row: {
+  id: number;
+  action: string;
+  entity_type: string;
+  entity_id: number | null;
+  summary: string;
+  created_at: Date | string;
+}): AuditLog => ({
+  ...row,
+  created_at: mapTimestamp(row.created_at)
+});
+
+const writeAuditLog = async (payload: {
+  action: string;
+  entityType: string;
+  entityId?: number | null;
+  summary: string;
+}): Promise<void> => {
+  await getPool().query(
+    "INSERT INTO audit_logs (action, entity_type, entity_id, summary) VALUES ($1, $2, $3, $4)",
+    [payload.action, payload.entityType, payload.entityId ?? null, payload.summary]
+  );
+};
+
 const seedCatalog = async (): Promise<void> => {
   const database = getPool();
   const countResult = await database.query<{ count: string }>(
@@ -313,6 +338,15 @@ export const initDb = async (): Promise<void> => {
         note TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
+
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id SERIAL PRIMARY KEY,
+        action TEXT NOT NULL,
+        entity_type TEXT NOT NULL,
+        entity_id INTEGER,
+        summary TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
     `);
 
     await seedCatalog();
@@ -341,7 +375,14 @@ export const addCustomer = async (payload: AddCustomerPayload): Promise<Customer
     [name, payload.phone?.trim() || null]
   );
 
-  return mapCustomer(result.rows[0] as Customer & { created_at: Date | string });
+  const customer = mapCustomer(result.rows[0] as Customer & { created_at: Date | string });
+  await writeAuditLog({
+    action: "create",
+    entityType: "customer",
+    entityId: customer.id,
+    summary: `Customer created: ${customer.name}${customer.phone ? ` (${customer.phone})` : ""}`
+  });
+  return customer;
 };
 
 export const addLedgerEntry = async (
@@ -395,7 +436,14 @@ export const addLedgerEntry = async (
     ]
   );
 
-  return mapLedgerEntry(result.rows[0] as LedgerEntry & { created_at: Date | string });
+  const entry = mapLedgerEntry(result.rows[0] as LedgerEntry & { created_at: Date | string });
+  await writeAuditLog({
+    action: "create",
+    entityType: "ledger_entry",
+    entityId: entry.id,
+    summary: `${entry.entry_type} entry for customer #${entry.customer_id}: ${entry.item_name} x ${entry.quantity} amount ${entry.amount.toFixed(2)}${entry.affects_balance === 0 ? " (cash)" : ""}`
+  });
+  return entry;
 };
 
 export const getLedgerEntries = async (customerId: number): Promise<LedgerEntry[]> => {
@@ -428,7 +476,14 @@ export const addCategory = async (payload: AddCategoryPayload): Promise<Category
     "INSERT INTO categories (name) VALUES ($1) RETURNING id, name, created_at",
     [name]
   );
-  return mapCategory(result.rows[0] as Category & { created_at: Date | string });
+  const category = mapCategory(result.rows[0] as Category & { created_at: Date | string });
+  await writeAuditLog({
+    action: "create",
+    entityType: "category",
+    entityId: category.id,
+    summary: `Category created: ${category.name}`
+  });
+  return category;
 };
 
 export const listBrands = async (categoryId?: number | null): Promise<Brand[]> => {
@@ -459,7 +514,14 @@ export const addBrand = async (payload: AddBrandPayload): Promise<Brand> => {
     "INSERT INTO brands (name, category_id) VALUES ($1, $2) RETURNING id, name, category_id, created_at",
     [name, payload.categoryId]
   );
-  return mapBrand(result.rows[0] as Brand & { created_at: Date | string });
+  const brand = mapBrand(result.rows[0] as Brand & { created_at: Date | string });
+  await writeAuditLog({
+    action: "create",
+    entityType: "brand",
+    entityId: brand.id,
+    summary: `Brand created: ${brand.name} in category #${brand.category_id}`
+  });
+  return brand;
 };
 
 export const getAllItems = async (filters?: ItemFilters): Promise<Item[]> => {
@@ -514,7 +576,14 @@ export const addItem = async (payload: AddItemPayload): Promise<Item> => {
       throw new Error("Item not found");
     }
 
-    return mapItem(result.rows[0] as Item & { created_at: Date | string });
+    const item = mapItem(result.rows[0] as Item & { created_at: Date | string });
+    await writeAuditLog({
+      action: "update",
+      entityType: "item",
+      entityId: item.id,
+      summary: `Item updated: ${item.name} rate ${item.default_rate ?? "-"} unit ${item.unit ?? "-"}`
+    });
+    return item;
   }
 
   const result = await getPool().query(
@@ -532,12 +601,41 @@ export const addItem = async (payload: AddItemPayload): Promise<Item> => {
     ]
   );
 
-  return mapItem(result.rows[0] as Item & { created_at: Date | string });
+  const item = mapItem(result.rows[0] as Item & { created_at: Date | string });
+  await writeAuditLog({
+    action: "create",
+    entityType: "item",
+    entityId: item.id,
+    summary: `Item created: ${item.name} rate ${item.default_rate ?? "-"} unit ${item.unit ?? "-"}`
+  });
+  return item;
 };
 
 export const deleteItem = async (itemId: number): Promise<void> => {
   await initDb();
+  const existing = await getPool().query<{ id: number; name: string }>(
+    "SELECT id, name FROM items WHERE id = $1",
+    [itemId]
+  );
   await getPool().query("DELETE FROM items WHERE id = $1", [itemId]);
+  const item = existing.rows[0];
+  if (item) {
+    await writeAuditLog({
+      action: "delete",
+      entityType: "item",
+      entityId: item.id,
+      summary: `Item deleted: ${item.name}`
+    });
+  }
+};
+
+export const listAuditLogs = async (limit = 50): Promise<AuditLog[]> => {
+  await initDb();
+  const result = await getPool().query(
+    "SELECT id, action, entity_type, entity_id, summary, created_at FROM audit_logs ORDER BY created_at DESC LIMIT $1",
+    [limit]
+  );
+  return result.rows.map((row) => mapAuditLog(row as AuditLog & { created_at: Date | string }));
 };
 
 export const getCustomerSummary = async (

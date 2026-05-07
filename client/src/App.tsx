@@ -46,6 +46,15 @@ type Item = {
   unit: string | null
 }
 
+type AuditLog = {
+  id: number
+  action: string
+  entity_type: string
+  entity_id: number | null
+  summary: string
+  created_at: string
+}
+
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 
 const apiUrl = (path: string) => {
@@ -201,6 +210,7 @@ function App() {
   const [items, setItems] = useState<Item[]>([])
   const [allBrands, setAllBrands] = useState<Brand[]>([])
   const [adminItems, setAdminItems] = useState<Item[]>([])
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
 
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
@@ -348,11 +358,17 @@ function App() {
     setAdminItems(data)
   }
 
+  const loadAuditLogs = async () => {
+    const data = await requestJson<AuditLog[]>('/api/audit-logs?limit=40')
+    setAuditLogs(data)
+  }
+
   useEffect(() => {
     loadCustomers()
     loadCategories()
     loadAllBrands()
     loadAdminItems()
+    loadAuditLogs()
   }, [])
 
   useEffect(() => {
@@ -407,6 +423,7 @@ function App() {
       setCustomerName('')
       setCustomerPhone('')
       await loadCustomers()
+      await loadAuditLogs()
     } catch (error) {
       alert((error as Error).message)
     }
@@ -445,6 +462,7 @@ function App() {
       setPaymentAmount('')
       setPaymentNote('')
       await loadLedger(selectedCustomerId)
+      await loadAuditLogs()
     } catch (error) {
       alert((error as Error).message)
     }
@@ -498,6 +516,7 @@ function App() {
       setEntryNote('')
       setIsCashSale(false)
       await loadLedger(selectedCustomerId)
+      await loadAuditLogs()
     } catch (error) {
       alert((error as Error).message)
     }
@@ -516,6 +535,7 @@ function App() {
       await loadCategories()
       await loadAllBrands()
       await loadAdminItems()
+      await loadAuditLogs()
     } catch (error) {
       alert((error as Error).message)
     }
@@ -537,6 +557,7 @@ function App() {
       await loadBrands(brandCategoryId)
       await loadAllBrands()
       await loadAdminItems()
+      await loadAuditLogs()
     } catch (error) {
       alert((error as Error).message)
     }
@@ -576,6 +597,7 @@ function App() {
       setEditingItemId(null)
       await loadItems()
       await loadAdminItems()
+      await loadAuditLogs()
     } catch (error) {
       alert((error as Error).message)
     }
@@ -597,6 +619,7 @@ function App() {
       await fetch(apiUrl(`/api/items/${itemId}`), { method: 'DELETE' })
       await loadItems()
       await loadAdminItems()
+      await loadAuditLogs()
     } catch (error) {
       alert((error as Error).message)
     }
@@ -1034,6 +1057,41 @@ function App() {
                         Delete
                       </button>
                     </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="panel admin-panel">
+          <div className="panel-header">
+            <h2>Audit Logs</h2>
+            <button type="button" className="btn-secondary" onClick={loadAuditLogs}>
+              Refresh Logs
+            </button>
+          </div>
+
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Action</th>
+                  <th>Entity</th>
+                  <th>Summary</th>
+                </tr>
+              </thead>
+              <tbody>
+                {auditLogs.map((log) => (
+                  <tr key={log.id}>
+                    <td>{log.created_at}</td>
+                    <td>{log.action}</td>
+                    <td>
+                      {log.entity_type}
+                      {log.entity_id ? ` #${log.entity_id}` : ''}
+                    </td>
+                    <td>{log.summary}</td>
                   </tr>
                 ))}
               </tbody>

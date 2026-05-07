@@ -13,6 +13,7 @@ import {
   getLedgerAging,
   getLedgerEntries,
   initDb,
+  listAuditLogs,
   listBrands,
   listCategories,
   listCustomers
@@ -231,6 +232,16 @@ app.delete("/api/items/:id", async (req, res) => {
   }
   await deleteItem(itemId);
   res.status(204).send();
+});
+
+app.get("/api/audit-logs", async (req, res) => {
+  const limit = req.query.limit ? Number(req.query.limit) : 50;
+  if (!Number.isFinite(limit) || limit <= 0) {
+    res.status(400).json({ error: "Invalid limit" });
+    return;
+  }
+
+  res.json(await listAuditLogs(Math.min(limit, 200)));
 });
 
 app.get("/api/export/customers.csv", async (_req, res) => {
