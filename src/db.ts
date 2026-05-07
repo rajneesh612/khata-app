@@ -54,7 +54,7 @@ const getDb = (): Database.Database => {
     return db;
   }
 
-  const dataDir = path.join(process.cwd(), "data");
+  const dataDir = process.env.DATA_DIR || path.join(process.cwd(), "data");
   fs.mkdirSync(dataDir, { recursive: true });
   const dbPath = path.join(dataDir, "khata.db");
   db = new Database(dbPath);

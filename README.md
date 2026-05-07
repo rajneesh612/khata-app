@@ -40,6 +40,7 @@ The SQLite database is stored in `data/khata.db`.
 - On Render free plan, filesystem storage is not reliable for production persistence.
 - The app can deploy, but data may reset on redeploy/restart.
 - For stable production data, move to a hosted database.
+- You can also set `DATA_DIR` to point at a persistent disk mount if you move to a paid Render web service with a disk attached.
 
 ### Deploy Steps
 1. Push this repo to GitHub.
