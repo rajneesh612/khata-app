@@ -40,6 +40,8 @@ export type Item = {
   brand_id: number;
   default_rate: number | null;
   unit: string | null;
+  stock_quantity: number;
+  low_stock_threshold: number;
   created_at: string;
 };
 
@@ -71,6 +73,12 @@ export type AddCustomerPayload = {
   phone?: string;
 };
 
+export type UpdateCustomerPayload = {
+  id: number;
+  name: string;
+  phone?: string | null;
+};
+
 export type AddLedgerEntryPayload = {
   customerId: number;
   itemId?: number | null;
@@ -99,6 +107,8 @@ export type AddItemPayload = {
   brandId: number;
   defaultRate?: number | null;
   unit?: string | null;
+  stockQuantity?: number | null;
+  lowStockThreshold?: number | null;
 };
 
 export type ItemFilters = {

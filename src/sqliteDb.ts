@@ -15,7 +15,8 @@ import type {
   Item,
   ItemFilters,
   LedgerAging,
-  LedgerEntry
+  LedgerEntry,
+  UpdateCustomerPayload
 } from "./dbTypes";
 
 let db: Database.Database | null = null;
@@ -77,6 +78,8 @@ const getDb = (): Database.Database => {
       brand_id INTEGER NOT NULL,
       default_rate REAL,
       unit TEXT,
+      stock_quantity REAL NOT NULL DEFAULT 0,
+      low_stock_threshold REAL NOT NULL DEFAULT 5,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE (name, brand_id),
       FOREIGN KEY (category_id) REFERENCES categories(id),
@@ -105,6 +108,8 @@ const getDb = (): Database.Database => {
   ensureColumn("ledger_entries", "item_id", "INTEGER");
   ensureColumn("ledger_entries", "unit", "TEXT");
   ensureColumn("ledger_entries", "affects_balance", "INTEGER NOT NULL DEFAULT 1");
+  ensureColumn("items", "stock_quantity", "REAL NOT NULL DEFAULT 0");
+  ensureColumn("items", "low_stock_threshold", "REAL NOT NULL DEFAULT 5");
 
   seedCatalog(db);
 
@@ -136,7 +141,7 @@ const seedCatalog = (database: Database.Database): void => {
     "INSERT INTO brands (name, category_id) VALUES (?, ?)"
   );
   const insertItem = database.prepare(
-    "INSERT INTO items (name, category_id, brand_id, default_rate, unit) VALUES (?, ?, ?, ?, ?)"
+    "INSERT INTO items (name, category_id, brand_id, default_rate, unit, stock_quantity, low_stock_threshold) VALUES (?, ?, ?, ?, ?, ?, ?)"
   );
 
   const seedBrands = [
@@ -262,7 +267,9 @@ const seedCatalog = (database: Database.Database): void => {
           categoryId,
           brandId,
           item.defaultRate,
-          item.unit
+          item.unit,
+          0,
+          5
         );
       }
     });
@@ -320,6 +327,35 @@ export const addCustomer = (payload: AddCustomerPayload): Customer => {
   return customer;
 };
 
+export const updateCustomer = (payload: UpdateCustomerPayload): Customer => {
+  const database = getDb();
+  const name = payload.name.trim();
+  if (!name) {
+    throw new Error("Customer name required");
+  }
+
+  const info = database
+    .prepare("UPDATE customers SET name = ?, phone = ? WHERE id = ?")
+    .run(name, payload.phone?.trim() || null, payload.id);
+
+  if (info.changes === 0) {
+    throw new Error("Customer not found");
+  }
+
+  const customer = database
+    .prepare("SELECT id, name, phone, created_at FROM customers WHERE id = ?")
+    .get(payload.id) as Customer;
+
+  writeAuditLog({
+    action: "update",
+    entityType: "customer",
+    entityId: customer.id,
+    summary: `Customer updated: ${customer.name}${customer.phone ? ` (${customer.phone})` : ""}`
+  });
+
+  return customer;
+};
+
 export const addLedgerEntry = (payload: AddLedgerEntryPayload): LedgerEntry => {
   const database = getDb();
   const itemName = payload.itemName.trim();
@@ -338,26 +374,50 @@ export const addLedgerEntry = (payload: AddLedgerEntryPayload): LedgerEntry => {
     ? Number(payload.quantity) * Number(normalizedRate)
     : Number(payload.quantity);
 
-  const info = database
-    .prepare(
-      "INSERT INTO ledger_entries (customer_id, item_id, item_name, quantity, rate, amount, unit, entry_type, affects_balance, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    )
-    .run(
-      payload.customerId,
-      payload.itemId ?? null,
-      itemName,
-      payload.quantity,
-      normalizedRate,
-      amount,
-      payload.unit ?? null,
-      payload.entryType,
-      payload.affectsBalance === false ? 0 : 1,
-      payload.note?.trim() || null
-    );
+  const entry = database.transaction(() => {
+    if (payload.entryType === "debit" && payload.itemId) {
+      const item = database
+        .prepare("SELECT id, stock_quantity FROM items WHERE id = ?")
+        .get(payload.itemId) as { id: number; stock_quantity: number } | undefined;
 
-  const entry = database
-    .prepare("SELECT * FROM ledger_entries WHERE id = ?")
-    .get(info.lastInsertRowid) as LedgerEntry;
+      if (!item) {
+        throw new Error("Selected item not found");
+      }
+      if (Number(item.stock_quantity) <= 0) {
+        throw new Error("Is item ka stock khatam ho gaya hai. Order create nahi ho sakta.");
+      }
+      if (Number(payload.quantity) > Number(item.stock_quantity)) {
+        throw new Error(
+          `Sirf ${Number(item.stock_quantity)} unit stock me hai. Itni quantity ka order create nahi ho sakta.`
+        );
+      }
+
+      database
+        .prepare("UPDATE items SET stock_quantity = stock_quantity - ? WHERE id = ?")
+        .run(payload.quantity, payload.itemId);
+    }
+
+    const info = database
+      .prepare(
+        "INSERT INTO ledger_entries (customer_id, item_id, item_name, quantity, rate, amount, unit, entry_type, affects_balance, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      )
+      .run(
+        payload.customerId,
+        payload.itemId ?? null,
+        itemName,
+        payload.quantity,
+        normalizedRate,
+        amount,
+        payload.unit ?? null,
+        payload.entryType,
+        payload.affectsBalance === false ? 0 : 1,
+        payload.note?.trim() || null
+      );
+
+    return database
+      .prepare("SELECT * FROM ledger_entries WHERE id = ?")
+      .get(info.lastInsertRowid) as LedgerEntry;
+  })();
 
   writeAuditLog({
     action: "create",
@@ -453,20 +513,20 @@ export const getAllItems = (filters?: ItemFilters): Item[] => {
   if (filters?.brandId) {
     return database
       .prepare(
-        "SELECT id, name, category_id, brand_id, default_rate, unit, created_at FROM items WHERE brand_id = ? ORDER BY name"
+        "SELECT id, name, category_id, brand_id, default_rate, unit, stock_quantity, low_stock_threshold, created_at FROM items WHERE brand_id = ? ORDER BY name"
       )
       .all(filters.brandId) as Item[];
   }
   if (filters?.categoryId) {
     return database
       .prepare(
-        "SELECT id, name, category_id, brand_id, default_rate, unit, created_at FROM items WHERE category_id = ? ORDER BY name"
+        "SELECT id, name, category_id, brand_id, default_rate, unit, stock_quantity, low_stock_threshold, created_at FROM items WHERE category_id = ? ORDER BY name"
       )
       .all(filters.categoryId) as Item[];
   }
   return database
     .prepare(
-      "SELECT id, name, category_id, brand_id, default_rate, unit, created_at FROM items ORDER BY name"
+      "SELECT id, name, category_id, brand_id, default_rate, unit, stock_quantity, low_stock_threshold, created_at FROM items ORDER BY name"
     )
     .all() as Item[];
 };
@@ -484,7 +544,7 @@ export const addItem = (payload: AddItemPayload): Item => {
   if (payload.id) {
     database
       .prepare(
-        "UPDATE items SET name = ?, category_id = ?, brand_id = ?, default_rate = ?, unit = ? WHERE id = ?"
+        "UPDATE items SET name = ?, category_id = ?, brand_id = ?, default_rate = ?, unit = ?, stock_quantity = ?, low_stock_threshold = ? WHERE id = ?"
       )
       .run(
         name,
@@ -492,11 +552,13 @@ export const addItem = (payload: AddItemPayload): Item => {
         payload.brandId,
         payload.defaultRate ?? null,
         payload.unit ?? null,
+        payload.stockQuantity ?? 0,
+        payload.lowStockThreshold ?? 5,
         payload.id
       );
     const updatedItem = database
       .prepare(
-        "SELECT id, name, category_id, brand_id, default_rate, unit, created_at FROM items WHERE id = ?"
+        "SELECT id, name, category_id, brand_id, default_rate, unit, stock_quantity, low_stock_threshold, created_at FROM items WHERE id = ?"
       )
       .get(payload.id) as Item;
 
@@ -512,19 +574,21 @@ export const addItem = (payload: AddItemPayload): Item => {
 
   const info = database
     .prepare(
-      "INSERT INTO items (name, category_id, brand_id, default_rate, unit) VALUES (?, ?, ?, ?, ?)"
+      "INSERT INTO items (name, category_id, brand_id, default_rate, unit, stock_quantity, low_stock_threshold) VALUES (?, ?, ?, ?, ?, ?, ?)"
     )
     .run(
       name,
       payload.categoryId,
       payload.brandId,
       payload.defaultRate ?? null,
-      payload.unit ?? null
+      payload.unit ?? null,
+      payload.stockQuantity ?? 0,
+      payload.lowStockThreshold ?? 5
     );
 
   const item = database
     .prepare(
-      "SELECT id, name, category_id, brand_id, default_rate, unit, created_at FROM items WHERE id = ?"
+      "SELECT id, name, category_id, brand_id, default_rate, unit, stock_quantity, low_stock_threshold, created_at FROM items WHERE id = ?"
     )
     .get(info.lastInsertRowid) as Item;
 

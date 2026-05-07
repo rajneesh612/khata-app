@@ -13,7 +13,8 @@ import type {
   Item,
   ItemFilters,
   LedgerAging,
-  LedgerEntry
+  LedgerEntry,
+  UpdateCustomerPayload
 } from "./dbTypes";
 
 const seedCategories = [
@@ -184,6 +185,8 @@ const mapItem = (row: {
   brand_id: number;
   default_rate: number | null;
   unit: string | null;
+  stock_quantity: number;
+  low_stock_threshold: number;
   created_at: Date | string;
 }): Item => ({
   ...row,
@@ -277,8 +280,8 @@ const seedCatalog = async (): Promise<void> => {
       continue;
     }
     await database.query(
-      "INSERT INTO items (name, category_id, brand_id, default_rate, unit) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (name, brand_id) DO NOTHING",
-      [item.name, categoryId, brandId, item.defaultRate, item.unit]
+      "INSERT INTO items (name, category_id, brand_id, default_rate, unit, stock_quantity, low_stock_threshold) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (name, brand_id) DO NOTHING",
+      [item.name, categoryId, brandId, item.defaultRate, item.unit, 0, 5]
     );
   }
 };
@@ -320,6 +323,8 @@ export const initDb = async (): Promise<void> => {
         brand_id INTEGER NOT NULL REFERENCES brands(id) ON DELETE RESTRICT,
         default_rate DOUBLE PRECISION,
         unit TEXT,
+        stock_quantity DOUBLE PRECISION NOT NULL DEFAULT 0,
+        low_stock_threshold DOUBLE PRECISION NOT NULL DEFAULT 5,
         created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
         UNIQUE (name, brand_id)
       );
@@ -347,6 +352,14 @@ export const initDb = async (): Promise<void> => {
         summary TEXT NOT NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
+    `);
+
+    await database.query(`
+      ALTER TABLE items
+      ADD COLUMN IF NOT EXISTS stock_quantity DOUBLE PRECISION NOT NULL DEFAULT 0;
+
+      ALTER TABLE items
+      ADD COLUMN IF NOT EXISTS low_stock_threshold DOUBLE PRECISION NOT NULL DEFAULT 5;
     `);
 
     await seedCatalog();
@@ -385,6 +398,34 @@ export const addCustomer = async (payload: AddCustomerPayload): Promise<Customer
   return customer;
 };
 
+export const updateCustomer = async (
+  payload: UpdateCustomerPayload
+): Promise<Customer> => {
+  await initDb();
+  const name = payload.name.trim();
+  if (!name) {
+    throw new Error("Customer name required");
+  }
+
+  const result = await getPool().query(
+    "UPDATE customers SET name = $1, phone = $2 WHERE id = $3 RETURNING id, name, phone, created_at",
+    [name, payload.phone?.trim() || null, payload.id]
+  );
+
+  if (!result.rows[0]) {
+    throw new Error("Customer not found");
+  }
+
+  const customer = mapCustomer(result.rows[0] as Customer & { created_at: Date | string });
+  await writeAuditLog({
+    action: "update",
+    entityType: "customer",
+    entityId: customer.id,
+    summary: `Customer updated: ${customer.name}${customer.phone ? ` (${customer.phone})` : ""}`
+  });
+  return customer;
+};
+
 export const addLedgerEntry = async (
   payload: AddLedgerEntryPayload
 ): Promise<LedgerEntry> => {
@@ -405,45 +446,85 @@ export const addLedgerEntry = async (
     ? Number(payload.quantity) * Number(normalizedRate)
     : Number(payload.quantity);
 
-  const result = await getPool().query(
-    `
-      INSERT INTO ledger_entries (
-        customer_id,
-        item_id,
-        item_name,
-        quantity,
-        rate,
-        amount,
-        unit,
-        entry_type,
-        affects_balance,
-        note
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-      RETURNING *
-    `,
-    [
-      payload.customerId,
-      payload.itemId ?? null,
-      itemName,
-      payload.quantity,
-      normalizedRate,
-      amount,
-      payload.unit ?? null,
-      payload.entryType,
-      payload.affectsBalance === false ? 0 : 1,
-      payload.note?.trim() || null
-    ]
-  );
+  const client = await getPool().connect();
 
-  const entry = mapLedgerEntry(result.rows[0] as LedgerEntry & { created_at: Date | string });
+  try {
+    await client.query("BEGIN");
+
+    if (payload.entryType === "debit" && payload.itemId) {
+      const itemResult = await client.query<{ id: number; stock_quantity: number }>(
+        "SELECT id, stock_quantity FROM items WHERE id = $1 FOR UPDATE",
+        [payload.itemId]
+      );
+
+      const item = itemResult.rows[0];
+      if (!item) {
+        throw new Error("Selected item not found");
+      }
+      if (Number(item.stock_quantity) <= 0) {
+        throw new Error("Is item ka stock khatam ho gaya hai. Order create nahi ho sakta.");
+      }
+      if (Number(payload.quantity) > Number(item.stock_quantity)) {
+        throw new Error(
+          `Sirf ${Number(item.stock_quantity)} unit stock me hai. Itni quantity ka order create nahi ho sakta.`
+        );
+      }
+
+      await client.query(
+        "UPDATE items SET stock_quantity = stock_quantity - $1 WHERE id = $2",
+        [payload.quantity, payload.itemId]
+      );
+    }
+
+    const result = await client.query(
+      `
+        INSERT INTO ledger_entries (
+          customer_id,
+          item_id,
+          item_name,
+          quantity,
+          rate,
+          amount,
+          unit,
+          entry_type,
+          affects_balance,
+          note
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        RETURNING *
+      `,
+      [
+        payload.customerId,
+        payload.itemId ?? null,
+        itemName,
+        payload.quantity,
+        normalizedRate,
+        amount,
+        payload.unit ?? null,
+        payload.entryType,
+        payload.affectsBalance === false ? 0 : 1,
+        payload.note?.trim() || null
+      ]
+    );
+
+    await client.query("COMMIT");
+
+    const entry = mapLedgerEntry(
+      result.rows[0] as LedgerEntry & { created_at: Date | string }
+    );
   await writeAuditLog({
     action: "create",
     entityType: "ledger_entry",
     entityId: entry.id,
     summary: `${entry.entry_type} entry for customer #${entry.customer_id}: ${entry.item_name} x ${entry.quantity} amount ${entry.amount.toFixed(2)}${entry.affects_balance === 0 ? " (cash)" : ""}`
   });
-  return entry;
+    return entry;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
 export const getLedgerEntries = async (customerId: number): Promise<LedgerEntry[]> => {
@@ -527,7 +608,7 @@ export const addBrand = async (payload: AddBrandPayload): Promise<Brand> => {
 export const getAllItems = async (filters?: ItemFilters): Promise<Item[]> => {
   await initDb();
   let query =
-    "SELECT id, name, category_id, brand_id, default_rate, unit, created_at FROM items";
+    "SELECT id, name, category_id, brand_id, default_rate, unit, stock_quantity, low_stock_threshold, created_at FROM items";
   const params: Array<number> = [];
 
   if (filters?.brandId) {
@@ -558,9 +639,9 @@ export const addItem = async (payload: AddItemPayload): Promise<Item> => {
     const result = await getPool().query(
       `
         UPDATE items
-        SET name = $1, category_id = $2, brand_id = $3, default_rate = $4, unit = $5
-        WHERE id = $6
-        RETURNING id, name, category_id, brand_id, default_rate, unit, created_at
+        SET name = $1, category_id = $2, brand_id = $3, default_rate = $4, unit = $5, stock_quantity = $6, low_stock_threshold = $7
+        WHERE id = $8
+        RETURNING id, name, category_id, brand_id, default_rate, unit, stock_quantity, low_stock_threshold, created_at
       `,
       [
         name,
@@ -568,6 +649,8 @@ export const addItem = async (payload: AddItemPayload): Promise<Item> => {
         payload.brandId,
         payload.defaultRate ?? null,
         payload.unit ?? null,
+        payload.stockQuantity ?? 0,
+        payload.lowStockThreshold ?? 5,
         payload.id
       ]
     );
@@ -588,16 +671,18 @@ export const addItem = async (payload: AddItemPayload): Promise<Item> => {
 
   const result = await getPool().query(
     `
-      INSERT INTO items (name, category_id, brand_id, default_rate, unit)
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING id, name, category_id, brand_id, default_rate, unit, created_at
+      INSERT INTO items (name, category_id, brand_id, default_rate, unit, stock_quantity, low_stock_threshold)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING id, name, category_id, brand_id, default_rate, unit, stock_quantity, low_stock_threshold, created_at
     `,
     [
       name,
       payload.categoryId,
       payload.brandId,
       payload.defaultRate ?? null,
-      payload.unit ?? null
+      payload.unit ?? null,
+      payload.stockQuantity ?? 0,
+      payload.lowStockThreshold ?? 5
     ]
   );
 

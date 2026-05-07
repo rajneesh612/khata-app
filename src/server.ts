@@ -16,7 +16,8 @@ import {
   listAuditLogs,
   listBrands,
   listCategories,
-  listCustomers
+  listCustomers,
+  updateCustomer
 } from "./db";
 
 const toCsvValue = (value: string | number | null): string => {
@@ -72,6 +73,25 @@ app.post("/api/customers", async (req, res) => {
       phone: req.body?.phone ? String(req.body.phone) : undefined
     });
     res.status(201).json(customer);
+  } catch (error) {
+    res.status(400).json({ error: (error as Error).message });
+  }
+});
+
+app.put("/api/customers/:id", async (req, res) => {
+  const customerId = Number(req.params.id);
+  if (!Number.isFinite(customerId)) {
+    res.status(400).json({ error: "Invalid customer id" });
+    return;
+  }
+
+  try {
+    const customer = await updateCustomer({
+      id: customerId,
+      name: String(req.body?.name || ""),
+      phone: req.body?.phone ? String(req.body.phone) : null
+    });
+    res.json(customer);
   } catch (error) {
     res.status(400).json({ error: (error as Error).message });
   }
@@ -193,7 +213,13 @@ app.post("/api/items", async (req, res) => {
       defaultRate: req.body?.defaultRate
         ? Number(req.body.defaultRate)
         : null,
-      unit: req.body?.unit ? String(req.body.unit) : null
+      unit: req.body?.unit ? String(req.body.unit) : null,
+      stockQuantity:
+        req.body?.stockQuantity !== undefined ? Number(req.body.stockQuantity) : null,
+      lowStockThreshold:
+        req.body?.lowStockThreshold !== undefined
+          ? Number(req.body.lowStockThreshold)
+          : null
     });
     res.status(201).json(item);
   } catch (error) {
@@ -216,7 +242,13 @@ app.put("/api/items/:id", async (req, res) => {
       defaultRate: req.body?.defaultRate
         ? Number(req.body.defaultRate)
         : null,
-      unit: req.body?.unit ? String(req.body.unit) : null
+      unit: req.body?.unit ? String(req.body.unit) : null,
+      stockQuantity:
+        req.body?.stockQuantity !== undefined ? Number(req.body.stockQuantity) : null,
+      lowStockThreshold:
+        req.body?.lowStockThreshold !== undefined
+          ? Number(req.body.lowStockThreshold)
+          : null
     });
     res.json(item);
   } catch (error) {

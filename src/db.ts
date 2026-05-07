@@ -15,7 +15,8 @@ export type {
   Item,
   ItemFilters,
   LedgerAging,
-  LedgerEntry
+  LedgerEntry,
+  UpdateCustomerPayload
 } from "./dbTypes";
 
 const usePostgres = Boolean(process.env.DATABASE_URL);
@@ -34,6 +35,14 @@ export const listCustomers = async () => {
 
 export const addCustomer = async (...args: Parameters<typeof postgresDb.addCustomer>) => {
   return usePostgres ? postgresDb.addCustomer(...args) : sqliteDb.addCustomer(...args);
+};
+
+export const updateCustomer = async (
+  ...args: Parameters<typeof postgresDb.updateCustomer>
+) => {
+  return usePostgres
+    ? postgresDb.updateCustomer(...args)
+    : sqliteDb.updateCustomer(...args);
 };
 
 export const addLedgerEntry = async (
