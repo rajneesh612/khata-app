@@ -67,6 +67,62 @@ const requestJson = async <T,>(
   return data as T
 }
 
+const wait = (ms: number) =>
+  new Promise((resolve) => {
+    window.setTimeout(resolve, ms)
+  })
+
+const getDownloadFilename = (response: Response, fallback: string) => {
+  const disposition = response.headers.get('content-disposition') || ''
+  const match = disposition.match(/filename="?([^";]+)"?/i)
+  return match?.[1] || fallback
+}
+
+const downloadFile = async (
+  url: string,
+  fallbackFileName: string,
+  retries = 1
+) => {
+  let lastError: Error | null = null
+
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    const response = await fetch(apiUrl(url))
+
+    if (response.ok) {
+      const blob = await response.blob()
+      const fileName = getDownloadFilename(response, fallbackFileName)
+      const objectUrl = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = objectUrl
+      link.download = fileName
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(objectUrl)
+      return
+    }
+
+    if ((response.status === 502 || response.status === 503) && attempt < retries) {
+      await wait(2500)
+      continue
+    }
+
+    let message = 'Download failed'
+    const contentType = response.headers.get('content-type') || ''
+    if (contentType.includes('application/json')) {
+      const data = (await response.json()) as { error?: string }
+      message = data.error || message
+    } else if (response.status === 502 || response.status === 503) {
+      message = 'Server wake ho raha hai, 5-10 second baad dubara try karein'
+    }
+
+    lastError = new Error(message)
+    break
+  }
+
+  throw lastError || new Error('Download failed')
+}
+
 const FieldLabel = ({ label }: { label: string }) => (
   <span className="field-label">{label}</span>
 )
@@ -171,6 +227,7 @@ function App() {
   const [itemRate, setItemRate] = useState('')
   const [itemUnit, setItemUnit] = useState('')
   const [editingItemId, setEditingItemId] = useState<number | null>(null)
+  const [downloadTarget, setDownloadTarget] = useState<null | 'customers' | 'ledger'>(null)
 
   const totalRow = useMemo(() => {
     const qty = entries.reduce(
@@ -545,6 +602,37 @@ function App() {
     }
   }
 
+  const handleCustomersCsvDownload = async () => {
+    try {
+      setDownloadTarget('customers')
+      await downloadFile('/api/export/customers.csv', 'customers-summary.csv', 1)
+    } catch (error) {
+      alert((error as Error).message)
+    } finally {
+      setDownloadTarget(null)
+    }
+  }
+
+  const handleCustomerLedgerCsvDownload = async () => {
+    if (!selectedCustomerId) {
+      alert('Select a customer first')
+      return
+    }
+
+    try {
+      setDownloadTarget('ledger')
+      await downloadFile(
+        `/api/export/customers/${selectedCustomerId}/ledger.csv`,
+        `customer-${selectedCustomerId}-ledger.csv`,
+        1
+      )
+    } catch (error) {
+      alert((error as Error).message)
+    } finally {
+      setDownloadTarget(null)
+    }
+  }
+
   const categoryMap = useMemo(() => {
     const map = new Map<number, string>()
     categories.forEach((category) => map.set(category.id, category.name))
@@ -571,9 +659,10 @@ function App() {
             <button
               type="button"
               className="btn-secondary"
-              onClick={() => (window.location.href = apiUrl('/api/export/customers.csv'))}
+              onClick={handleCustomersCsvDownload}
+              disabled={downloadTarget !== null}
             >
-              Download All (CSV)
+              {downloadTarget === 'customers' ? 'Preparing CSV...' : 'Download All (CSV)'}
             </button>
           </div>
           <form className="form-row" onSubmit={handleCustomerSubmit}>
@@ -633,17 +722,12 @@ function App() {
             <button
               type="button"
               className="btn-secondary"
-              onClick={() => {
-                if (!selectedCustomerId) {
-                  alert('Select a customer first')
-                  return
-                }
-                window.location.href = apiUrl(
-                  `/api/export/customers/${selectedCustomerId}/ledger.csv`
-                )
-              }}
+              onClick={handleCustomerLedgerCsvDownload}
+              disabled={downloadTarget !== null}
             >
-              Download Customer (CSV)
+              {downloadTarget === 'ledger'
+                ? 'Preparing CSV...'
+                : 'Download Customer (CSV)'}
             </button>
           </div>
           <div className="summary">
