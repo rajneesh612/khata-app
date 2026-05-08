@@ -721,6 +721,24 @@ export const deleteItem = async (itemId: number): Promise<void> => {
   }
 };
 
+export const deleteLedgerEntry = async (entryId: number): Promise<void> => {
+  await initDb();
+  const existing = await getPool().query<{ id: number; item_name: string }>(
+    "SELECT id, item_name FROM ledger_entries WHERE id = $1",
+    [entryId]
+  );
+  await getPool().query("DELETE FROM ledger_entries WHERE id = $1", [entryId]);
+  const entry = existing.rows[0];
+  if (entry) {
+    await writeAuditLog({
+      action: "delete",
+      entityType: "ledger_entry",
+      entityId: entry.id,
+      summary: `Ledger entry deleted: ${entry.item_name}`
+    });
+  }
+};
+
 export const listAuditLogs = async (limit = 50): Promise<AuditLog[]> => {
   await initDb();
   const result = await getPool().query(
