@@ -346,6 +346,16 @@ button {
   background: linear-gradient(135deg, #92400e 0%, #b45309 100%);
 }
 
+.btn-call-vendor {
+  background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%);
+  color: #ffffff;
+  white-space: nowrap;
+}
+
+.btn-call-vendor:hover {
+  background: linear-gradient(135deg, #0b5f58 0%, #0f9488 100%);
+}
+
 .status-cell {
   min-width: 160px;
   vertical-align: middle;

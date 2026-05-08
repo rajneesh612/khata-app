@@ -2,6 +2,7 @@ export type Customer = {
   id: number;
   name: string;
   phone: string | null;
+  address: string | null;
   created_at: string;
 };
 
@@ -71,12 +72,14 @@ export type AuditLog = {
 export type AddCustomerPayload = {
   name: string;
   phone?: string;
+  address?: string;
 };
 
 export type UpdateCustomerPayload = {
   id: number;
   name: string;
   phone?: string | null;
+  address?: string | null;
 };
 
 export type AddLedgerEntryPayload = {

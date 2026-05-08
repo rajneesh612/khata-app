@@ -5,6 +5,7 @@ type Customer = {
   id: number
   name: string
   phone: string | null
+  address: string | null
 }
 
 type LedgerEntry = {
@@ -221,6 +222,8 @@ function App() {
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false)
   const [editCustomerName, setEditCustomerName] = useState('')
   const [editCustomerPhone, setEditCustomerPhone] = useState('')
+  const [customerAddress, setCustomerAddress] = useState('')
+const [editCustomerAddress, setEditCustomerAddress] = useState('')
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentNote, setPaymentNote] = useState('')
   const [entryType, setEntryType] = useState<'debit' | 'credit'>('debit')
@@ -373,6 +376,15 @@ function App() {
     return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`
   }
 
+  const buildCallLink = (phoneValue: string) => {
+    const phone = phoneValue.replace(/\D/g, '')
+    if (!phone) {
+      throw new Error('Valid phone number required to call vendor')
+    }
+
+    return `tel:${phone}`
+  }
+
   const getSuggestedVendorOrderQuantity = (item: Item) => {
     return Math.max(Math.ceil(Number(item.low_stock_threshold) * 2 - Number(item.stock_quantity)), 1)
   }
@@ -433,6 +445,19 @@ function App() {
       const link = buildWhatsappLink(vendorOrderDraft.vendorPhone, message)
       window.open(link, '_blank', 'noopener,noreferrer')
       closeVendorOrderModal()
+    } catch (error) {
+      alert((error as Error).message)
+    }
+  }
+
+  const callVendor = () => {
+    if (!vendorOrderDraft) {
+      return
+    }
+
+    try {
+      const link = buildCallLink(vendorOrderDraft.vendorPhone)
+      window.open(link, '_self')
     } catch (error) {
       alert((error as Error).message)
     }
@@ -513,6 +538,7 @@ function App() {
     if (selectedCustomer) {
       setEditCustomerName(selectedCustomer.name)
       setEditCustomerPhone(selectedCustomer.phone || '')
+      setEditCustomerAddress(selectedCustomer.address || '')
     }
   }, [selectedCustomer])
 
@@ -569,10 +595,11 @@ function App() {
       await requestJson('/api/customers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: customerName, phone: customerPhone }),
+        body: JSON.stringify({ name: customerName, phone: customerPhone, address: customerAddress }),
       })
       setCustomerName('')
       setCustomerPhone('')
+      setCustomerAddress('')
       await loadCustomers()
       await loadAuditLogs()
     } catch (error) {
@@ -602,6 +629,7 @@ function App() {
     setIsCustomerModalOpen(true)
     setEditCustomerName(customer.name)
     setEditCustomerPhone(customer.phone || '')
+    setEditCustomerAddress(customer.address || '')
     resetCustomerModalState()
     await loadLedger(customer.id)
   }
@@ -622,9 +650,10 @@ function App() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: editCustomerName,
-          phone: editCustomerPhone,
-        }),
+  name: editCustomerName,
+  phone: editCustomerPhone,
+  address: editCustomerAddress,
+}),
       })
       await loadCustomers()
       await loadAuditLogs()
@@ -906,6 +935,20 @@ function App() {
     }
   }
 
+  const handleEntryDelete = async (entryId: number) => {
+  const ok = window.confirm('Is entry ko delete karna chahte ho?')
+  if (!ok) return
+  try {
+    await fetch(apiUrl(`/api/customers/${selectedCustomerId}/entries/${entryId}`), { method: 'DELETE' })
+    await loadLedger(selectedCustomerId!)
+    await loadAdminItems()
+    await loadAuditLogs()
+  } catch (error) {
+    alert((error as Error).message)
+  }
+}
+
+
   const handleCustomersCsvDownload = async () => {
     try {
       setDownloadTarget('customers')
@@ -953,7 +996,7 @@ function App() {
     <div className="app">
       <header className="app-header">
         <h1>Khata Manager</h1>
-        <p>Hinglish UI: customers ka khata, entries, aur aging summary.</p>
+        <p>Hello Lala Ji.</p>
       </header>
 
       <main className="layout">
@@ -981,6 +1024,13 @@ function App() {
               value={customerPhone}
               onChange={setCustomerPhone}
               placeholder="Phone"
+            />
+
+                        <TextField
+              label="Address (optional)"
+              value={customerAddress}
+              onChange={setCustomerAddress}
+              placeholder="Address"
             />
             <button type="submit">Add Customer</button>
           </form>
@@ -1488,6 +1538,14 @@ function App() {
                     onChange={setEditCustomerPhone}
                     placeholder="Phone"
                   />
+
+                 <TextField
+                    label="Address (optional)"
+                        
+                    value={editCustomerAddress}       
+                    onChange={setEditCustomerAddress}     
+                    placeholder="Address"
+                  />
                 </div>
 
                 <div className="summary-block compact-summary-block">
@@ -1636,6 +1694,7 @@ function App() {
                       <th>Rate</th>
                       <th>Amount</th>
                       <th>Note</th>
+                      <th>Delete</th> 
                     </tr>
                   </thead>
                   <tbody>
@@ -1656,18 +1715,28 @@ function App() {
                         <td>{entry.rate ?? '-'}</td>
                         <td>{entry.amount.toFixed(2)}</td>
                         <td>{entry.note ?? ''}</td>
+                        <td>
+  <button
+    type="button"
+    className="btn-danger"
+    onClick={() => handleEntryDelete(entry.id)}
+  >
+    Delete
+  </button>
+</td>
                       </tr>
                     ))}
                   </tbody>
-                  <tfoot>
-                    <tr>
-                      <td colSpan={3}>Total</td>
-                      <td>{totalRow.qty.toFixed(2)}</td>
-                      <td>-</td>
-                      <td>{totalRow.amount.toFixed(2)}</td>
-                      <td></td>
-                    </tr>
-                  </tfoot>
+               <tfoot>
+  <tr>
+    <td colSpan={3}>Total</td>
+    <td>{totalRow.qty.toFixed(2)}</td>
+    <td>-</td>
+    <td>{totalRow.amount.toFixed(2)}</td>
+    <td></td>
+    <td></td>
+  </tr>
+</tfoot>
                 </table>
               </div>
             </div>
@@ -1702,7 +1771,7 @@ function App() {
 
             <div className="form-grid vendor-order-form-grid">
               <TextField
-                label="Vendor WhatsApp number"
+                label="Vendor phone / WhatsApp"
                 value={vendorOrderDraft.vendorPhone}
                 onChange={(value) =>
                   setVendorOrderDraft((current) =>
@@ -1738,6 +1807,9 @@ function App() {
             </div>
 
             <div className="actions">
+              <button type="button" className="btn-call-vendor" onClick={callVendor}>
+                Call Vendor
+              </button>
               <button type="button" className="btn-order-vendor" onClick={submitVendorOrder}>
                 Send Order on WhatsApp
               </button>

@@ -89,6 +89,10 @@ export const deleteItem = async (...args: Parameters<typeof postgresDb.deleteIte
   return usePostgres ? postgresDb.deleteItem(...args) : sqliteDb.deleteItem(...args);
 };
 
+export const deleteLedgerEntry = async (...args: Parameters<typeof postgresDb.deleteLedgerEntry>) => {
+  return usePostgres ? postgresDb.deleteLedgerEntry(...args) : sqliteDb.deleteLedgerEntry(...args);
+};
+
 export const listAuditLogs = async (...args: Parameters<typeof postgresDb.listAuditLogs>) => {
   return usePostgres ? postgresDb.listAuditLogs(...args) : sqliteDb.listAuditLogs(...args);
 };

@@ -126,6 +126,7 @@ const getPool = (): Pool => {
   if (pool) {
     return pool;
   }
+  
 
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
@@ -153,6 +154,7 @@ const mapCustomer = (row: {
   id: number;
   name: string;
   phone: string | null;
+  address: string | null;
   created_at: Date | string;
 }): Customer => ({
   ...row,
@@ -362,6 +364,11 @@ export const initDb = async (): Promise<void> => {
       ADD COLUMN IF NOT EXISTS low_stock_threshold DOUBLE PRECISION NOT NULL DEFAULT 5;
     `);
 
+        await database.query(`
+      ALTER TABLE customers
+      ADD COLUMN IF NOT EXISTS address TEXT;
+    `);
+
     await seedCatalog();
   })();
 
@@ -371,7 +378,7 @@ export const initDb = async (): Promise<void> => {
 export const listCustomers = async (): Promise<Customer[]> => {
   await initDb();
   const result = await getPool().query(
-    "SELECT id, name, phone, created_at FROM customers ORDER BY name"
+    "SELECT id, name, phone, address, created_at FROM customers ORDER BY name"
   );
   return result.rows.map((row) => mapCustomer(row as Customer & { created_at: Date | string }));
 };
@@ -384,8 +391,8 @@ export const addCustomer = async (payload: AddCustomerPayload): Promise<Customer
   }
 
   const result = await getPool().query(
-    "INSERT INTO customers (name, phone) VALUES ($1, $2) RETURNING id, name, phone, created_at",
-    [name, payload.phone?.trim() || null]
+    "INSERT INTO customers (name, phone, address) VALUES ($1, $2, $3) RETURNING id, name, phone, address, created_at",
+[name, payload.phone?.trim() || null, payload.address?.trim() || null]
   );
 
   const customer = mapCustomer(result.rows[0] as Customer & { created_at: Date | string });
@@ -408,8 +415,8 @@ export const updateCustomer = async (
   }
 
   const result = await getPool().query(
-    "UPDATE customers SET name = $1, phone = $2 WHERE id = $3 RETURNING id, name, phone, created_at",
-    [name, payload.phone?.trim() || null, payload.id]
+    "UPDATE customers SET name = $1, phone = $2, address = $3 WHERE id = $4 RETURNING id, name, phone, address, created_at",
+    [name, payload.phone?.trim() || null, payload.address?.trim() || null, payload.id]
   );
 
   if (!result.rows[0]) {

@@ -109,6 +109,7 @@ const getDb = (): Database.Database => {
   ensureColumn("ledger_entries", "unit", "TEXT");
   ensureColumn("ledger_entries", "affects_balance", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn("items", "stock_quantity", "REAL NOT NULL DEFAULT 0");
+  ensureColumn("customers", "address", "TEXT");
   ensureColumn("items", "low_stock_threshold", "REAL NOT NULL DEFAULT 5");
 
   seedCatalog(db);
@@ -695,3 +696,20 @@ export const getLedgerAging = (customerId: number): LedgerAging => {
 
   return buckets;
 };
+
+export const deleteLedgerEntry = (entryId: number): void => {
+  const database = getDb();
+  const entry = database
+    .prepare("SELECT id, item_name FROM ledger_entries WHERE id = ?")
+    .get(entryId) as { id: number; item_name: string } | undefined;
+  database.prepare("DELETE FROM ledger_entries WHERE id = ?").run(entryId);
+  if (entry) {
+    writeAuditLog({
+      action: "delete",
+      entityType: "ledger_entry",
+      entityId: entry.id,
+      summary: `Ledger entry deleted: ${entry.item_name}`
+    });
+  }
+};
+

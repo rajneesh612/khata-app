@@ -17,7 +17,9 @@ import {
   listBrands,
   listCategories,
   listCustomers,
-  updateCustomer
+  updateCustomer,
+  deleteLedgerEntry,
+  
 } from "./db";
 
 const toCsvValue = (value: string | number | null): string => {
@@ -69,9 +71,10 @@ app.get("/api/customers", async (_req, res) => {
 app.post("/api/customers", async (req, res) => {
   try {
     const customer = await addCustomer({
-      name: String(req.body?.name || ""),
-      phone: req.body?.phone ? String(req.body.phone) : undefined
-    });
+  name: String(req.body?.name || ""),
+  phone: req.body?.phone ? String(req.body.phone) : undefined,
+  address: req.body?.address ? String(req.body.address) : undefined
+});
     res.status(201).json(customer);
   } catch (error) {
     res.status(400).json({ error: (error as Error).message });
@@ -87,10 +90,11 @@ app.put("/api/customers/:id", async (req, res) => {
 
   try {
     const customer = await updateCustomer({
-      id: customerId,
-      name: String(req.body?.name || ""),
-      phone: req.body?.phone ? String(req.body.phone) : null
-    });
+  id: customerId,
+  name: String(req.body?.name || ""),
+  phone: req.body?.phone ? String(req.body.phone) : null,
+  address: req.body?.address ? String(req.body.address) : null
+});
     res.json(customer);
   } catch (error) {
     res.status(400).json({ error: (error as Error).message });
@@ -263,6 +267,16 @@ app.delete("/api/items/:id", async (req, res) => {
     return;
   }
   await deleteItem(itemId);
+  res.status(204).send();
+});
+
+app.delete("/api/customers/:customerId/entries/:entryId", async (req, res) => {
+  const entryId = Number(req.params.entryId);
+  if (!Number.isFinite(entryId)) {
+    res.status(400).json({ error: "Invalid entry id" });
+    return;
+  }
+  await deleteLedgerEntry(entryId);
   res.status(204).send();
 });
 
