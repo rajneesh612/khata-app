@@ -252,7 +252,7 @@ if (process.env.NODE_ENV !== "production") {
 
 // Fallback for SPA (Should be last)
 app.get("*", (req, res, next) => {
-  if (req.path.startsWith("/api")) {
+  if (req.path.startsWith("/api/")) {
     return next();
   }
   res.sendFile(path.join(clientDist, "index.html"));
