@@ -205,9 +205,6 @@ function App() {
   const [summary, setSummary] = useState<Summary | null>(null)
   const [aging, setAging] = useState<Aging | null>(null)
 
-  const [categories, setCategories] = useState<Category[]>([])
-  const [allBrands, setAllBrands] = useState<Brand[]>([])
-  const [adminItems, setAdminItems] = useState<Item[]>([])
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
 
   const [customerName, setCustomerName] = useState('')
@@ -331,21 +328,6 @@ const [editCustomerAddress, setEditCustomerAddress] = useState('')
     setEntries(entriesData)
     setSummary(summaryData)
     setAging(agingData)
-  }
-
-  const loadCategories = async () => {
-    const data = await requestJson<Category[]>('/api/categories')
-    setCategories(data)
-  }
-
-  const loadAllBrands = async () => {
-    const data = await requestJson<Brand[]>('/api/brands')
-    setAllBrands(data)
-  }
-
-  const loadAdminItems = async () => {
-    const data = await requestJson<Item[]>('/api/items')
-    setAdminItems(data)
   }
 
   const loadAuditLogs = async () => {
@@ -567,18 +549,6 @@ const [editCustomerAddress, setEditCustomerAddress] = useState('')
       setDownloadTarget(null)
     }
   }
-
-  const categoryMap = useMemo(() => {
-    const map = new Map<number, string>()
-    categories.forEach((category) => map.set(category.id, category.name))
-    return map
-  }, [categories])
-
-  const brandMap = useMemo(() => {
-    const map = new Map<number, string>()
-    allBrands.forEach((brand) => map.set(brand.id, brand.name))
-    return map
-  }, [allBrands])
 
   return (
     <div className="app">
