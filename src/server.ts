@@ -114,36 +114,6 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
-app.post("/api/auth/logout", (_req, res) => {
-  res.clearCookie("token");
-  res.json({ message: "Logged out successfully" });
-});
-
-app.get("/api/auth/me", authenticateToken, (req: AuthRequest, res) => {
-  res.json(req.user);
-});
-
-// Business Routes
-app.get("/api/customers", async (req, res) => {
-  // TEMP: No auth required
-  res.json(await listCustomers(1)); // Default to shopId 1 for demo
-});
-
-app.post("/api/customers", async (req, res) => {
-  // TEMP: No auth required
-  try {
-    const customer = await addCustomer({
-      shop_id: 1, // Default to shopId 1 for demo
-      name: String(req.body?.name || ""),
-      phone: req.body?.phone ? String(req.body.phone) : undefined,
-      address: req.body?.address ? String(req.body.address) : undefined
-    });
-    res.status(201).json(customer);
-  } catch (error) {
-    res.status(400).json({ error: (error as Error).message });
-  }
-});
-
 app.put("/api/customers/:id", async (req, res) => {
   // TEMP: No auth required
   const customerId = Number(req.params.id);

@@ -16,7 +16,7 @@ const Signup: React.FC = () => {
     e.preventDefault();
     try {
       await api.post('/auth/signup', formData);
-      navigate('/login');
+      navigate('/');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Signup failed');
     }
@@ -76,7 +76,7 @@ const Signup: React.FC = () => {
           </button>
         </form>
         <p className="mt-4 text-center text-gray-600">
-          Already have an account? <Link to="/login" className="text-blue-600 hover:underline">Login here</Link>
+          {/* Already have an account? Login here (login removed) */}
         </p>
       </div>
     </div>

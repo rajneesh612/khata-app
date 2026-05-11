@@ -28,7 +28,7 @@ const ProtectedRoute: React.FC = () => {
     );
   }
 
-  return authenticated ? <Outlet /> : <Navigate to="/login" replace />;
+  return authenticated ? <Outlet /> : <Navigate to="/" replace />;
 };
 
 export default ProtectedRoute;

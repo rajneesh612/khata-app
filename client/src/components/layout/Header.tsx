@@ -19,8 +19,8 @@ const Header: React.FC = () => {
     }
   };
 
-  // Hide header on login/signup pages
-  if (['/login', '/signup'].includes(location.pathname)) {
+  // Hide header on signup page only
+  if (['/signup'].includes(location.pathname)) {
     return null;
   }
 
