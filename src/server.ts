@@ -124,14 +124,16 @@ app.get("/api/auth/me", authenticateToken, (req: AuthRequest, res) => {
 });
 
 // Business Routes
-app.get("/api/customers", authenticateToken, async (req: AuthRequest, res) => {
-  res.json(await listCustomers(req.user!.shopId));
+app.get("/api/customers", async (req, res) => {
+  // TEMP: No auth required
+  res.json(await listCustomers(1)); // Default to shopId 1 for demo
 });
 
-app.post("/api/customers", authenticateToken, async (req: AuthRequest, res) => {
+app.post("/api/customers", async (req, res) => {
+  // TEMP: No auth required
   try {
     const customer = await addCustomer({
-      shop_id: req.user!.shopId,
+      shop_id: 1, // Default to shopId 1 for demo
       name: String(req.body?.name || ""),
       phone: req.body?.phone ? String(req.body.phone) : undefined,
       address: req.body?.address ? String(req.body.address) : undefined
@@ -142,12 +144,13 @@ app.post("/api/customers", authenticateToken, async (req: AuthRequest, res) => {
   }
 });
 
-app.put("/api/customers/:id", authenticateToken, async (req: AuthRequest, res) => {
+app.put("/api/customers/:id", async (req, res) => {
+  // TEMP: No auth required
   const customerId = Number(req.params.id);
   try {
     const customer = await updateCustomer({
       id: customerId,
-      shop_id: req.user!.shopId,
+      shop_id: 1, // Default to shopId 1 for demo
       name: String(req.body?.name || ""),
       phone: req.body?.phone ? String(req.body.phone) : null,
       address: req.body?.address ? String(req.body.address) : null
@@ -158,16 +161,18 @@ app.put("/api/customers/:id", authenticateToken, async (req: AuthRequest, res) =
   }
 });
 
-app.get("/api/customers/:id/entries", authenticateToken, async (req: AuthRequest, res) => {
+app.get("/api/customers/:id/entries", async (req, res) => {
+  // TEMP: No auth required
   const customerId = Number(req.params.id);
-  res.json(await getLedgerEntries(req.user!.shopId, customerId));
+  res.json(await getLedgerEntries(1, customerId)); // Default to shopId 1 for demo
 });
 
-app.post("/api/customers/:id/entries", authenticateToken, async (req: AuthRequest, res) => {
+app.post("/api/customers/:id/entries", async (req, res) => {
+  // TEMP: No auth required
   const customerId = Number(req.params.id);
   try {
     const entry = await addLedgerEntry({
-      shop_id: req.user!.shopId,
+      shop_id: 1, // Default to shopId 1 for demo
       customerId,
       itemId: req.body?.itemId ? Number(req.body.itemId) : null,
       itemName: String(req.body?.itemName || ""),
@@ -184,34 +189,39 @@ app.post("/api/customers/:id/entries", authenticateToken, async (req: AuthReques
   }
 });
 
-app.delete("/api/customers/:customerId/entries/:entryId", authenticateToken, async (req: AuthRequest, res) => {
+app.delete("/api/customers/:customerId/entries/:entryId", async (req, res) => {
+  // TEMP: No auth required
   try {
-    await deleteLedgerEntry(req.user!.shopId, Number(req.params.entryId));
+    await deleteLedgerEntry(1, Number(req.params.entryId)); // Default to shopId 1 for demo
     res.status(204).end();
   } catch (error) {
     res.status(400).json({ error: (error as Error).message });
   }
 });
 
-app.get("/api/customers/:id/summary", authenticateToken, async (req: AuthRequest, res) => {
-  res.json(await getCustomerSummary(req.user!.shopId, Number(req.params.id)));
+app.get("/api/customers/:id/summary", async (req, res) => {
+  // TEMP: No auth required
+  res.json(await getCustomerSummary(1, Number(req.params.id)));
 });
 
-app.get("/api/customers/:id/aging", authenticateToken, async (req: AuthRequest, res) => {
-  res.json(await getLedgerAging(req.user!.shopId, Number(req.params.id)));
+app.get("/api/customers/:id/aging", async (req, res) => {
+  // TEMP: No auth required
+  res.json(await getLedgerAging(1, Number(req.params.id)));
 });
 
-app.get("/api/audit-logs", authenticateToken, async (req: AuthRequest, res) => {
+app.get("/api/audit-logs", async (req, res) => {
+  // TEMP: No auth required
   const limit = req.query.limit ? Number(req.query.limit) : 50;
-  res.json(await listAuditLogs(req.user!.shopId, limit));
+  res.json(await listAuditLogs(1, limit));
 });
 
 // CSV Export (Protected)
-app.get("/api/export/customers.csv", authenticateToken, async (req: AuthRequest, res) => {
-  const customers = await listCustomers(req.user!.shopId);
+app.get("/api/export/customers.csv", async (req, res) => {
+  // TEMP: No auth required
+  const customers = await listCustomers(1);
   const data = await Promise.all(
     customers.map(async (c: any) => {
-      const s = await getCustomerSummary(req.user!.shopId, c.id);
+      const s = await getCustomerSummary(1, c.id);
       return { ...c, ...s };
     })
   );
@@ -226,9 +236,10 @@ app.get("/api/export/customers.csv", authenticateToken, async (req: AuthRequest,
   res.send(csv);
 });
 
-app.get("/api/export/ledger/:customerId.csv", authenticateToken, async (req: AuthRequest, res) => {
+app.get("/api/export/ledger/:customerId.csv", async (req, res) => {
+  // TEMP: No auth required
   const customerId = Number(req.params.customerId);
-  const entries = await getLedgerEntries(req.user!.shopId, customerId);
+  const entries = await getLedgerEntries(1, customerId);
   
   let csv = "Date,Type,Item,Quantity,Rate,Amount,Note\n";
   entries.forEach((row: any) => {
