@@ -36,19 +36,6 @@ type Aging = {
   older: number
 }
 
-type Category = { id: number; name: string }
-type Brand = { id: number; name: string; category_id: number }
-type Item = {
-  id: number
-  name: string
-  category_id: number
-  brand_id: number
-  default_rate: number | null
-  unit: string | null
-  stock_quantity: number
-  low_stock_threshold: number
-}
-
 type AuditLog = {
   id: number
   action: string
@@ -511,7 +498,6 @@ const [editCustomerAddress, setEditCustomerAddress] = useState('')
   try {
     await fetch(apiUrl(`/api/customers/${selectedCustomerId}/entries/${entryId}`), { method: 'DELETE' })
     await loadLedger(selectedCustomerId!)
-    await loadAdminItems()
     await loadAuditLogs()
   } catch (error) {
     alert((error as Error).message)
