@@ -152,6 +152,7 @@ const mapTimestamp = (value: Date | string): string => {
 
 const mapCustomer = (row: {
   id: number;
+  shop_id: number;
   name: string;
   phone: string | null;
   address: string | null;
@@ -163,6 +164,7 @@ const mapCustomer = (row: {
 
 const mapCategory = (row: {
   id: number;
+  shop_id: number;
   name: string;
   created_at: Date | string;
 }): Category => ({
@@ -172,6 +174,7 @@ const mapCategory = (row: {
 
 const mapBrand = (row: {
   id: number;
+  shop_id: number;
   name: string;
   category_id: number;
   created_at: Date | string;
@@ -182,6 +185,7 @@ const mapBrand = (row: {
 
 const mapItem = (row: {
   id: number;
+  shop_id: number;
   name: string;
   category_id: number;
   brand_id: number;
@@ -197,6 +201,7 @@ const mapItem = (row: {
 
 const mapLedgerEntry = (row: {
   id: number;
+  shop_id: number;
   customer_id: number;
   item_id: number | null;
   item_name: string;
@@ -215,6 +220,7 @@ const mapLedgerEntry = (row: {
 
 const mapAuditLog = (row: {
   id: number;
+  shop_id: number;
   action: string;
   entity_type: string;
   entity_id: number | null;
