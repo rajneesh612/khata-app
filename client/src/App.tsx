@@ -1,4 +1,5 @@
 import { type FormEvent, useEffect, useMemo, useState } from 'react'
+import api from './api'
 import './App.css'
 
 type Customer = {
@@ -45,34 +46,13 @@ type AuditLog = {
   created_at: string
 }
 
-const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
-
-const apiUrl = (path: string) => {
-  if (!apiBaseUrl) {
-    return path
-  }
-  return `${apiBaseUrl}${path}`
-}
-
-const requestJson = async <T,>(
-  url: string,
-  options?: RequestInit
-): Promise<T> => {
-  const response = await fetch(apiUrl(url), options)
-  const data = await response.json()
-  if (!response.ok) {
-    throw new Error(data.error || 'Request failed')
-  }
-  return data as T
-}
-
 const wait = (ms: number) =>
   new Promise((resolve) => {
     window.setTimeout(resolve, ms)
   })
 
-const getDownloadFilename = (response: Response, fallback: string) => {
-  const disposition = response.headers.get('content-disposition') || ''
+const getDownloadFilename = (response: any, fallback: string) => {
+  const disposition = response.headers['content-disposition'] || ''
   const match = disposition.match(/filename="?([^";]+)"?/i)
   return match?.[1] || fallback
 }
@@ -85,10 +65,10 @@ const downloadFile = async (
   let lastError: Error | null = null
 
   for (let attempt = 0; attempt <= retries; attempt += 1) {
-    const response = await fetch(apiUrl(url))
+    try {
+      const response = await api.get(url, { responseType: 'blob' })
 
-    if (response.ok) {
-      const blob = await response.blob()
+      const blob = new Blob([response.data], { type: response.headers['content-type'] as string || 'text/csv' })
       const fileName = getDownloadFilename(response, fallbackFileName)
       const objectUrl = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
@@ -99,24 +79,14 @@ const downloadFile = async (
       link.remove()
       window.URL.revokeObjectURL(objectUrl)
       return
+    } catch (err: any) {
+      if ((err.response?.status === 502 || err.response?.status === 503) && attempt < retries) {
+        await wait(2500)
+        continue
+      }
+      lastError = new Error(err.response?.data?.error || 'Download failed')
+      break
     }
-
-    if ((response.status === 502 || response.status === 503) && attempt < retries) {
-      await wait(2500)
-      continue
-    }
-
-    let message = 'Download failed'
-    const contentType = response.headers.get('content-type') || ''
-    if (contentType.includes('application/json')) {
-      const data = (await response.json()) as { error?: string }
-      message = data.error || message
-    } else if (response.status === 502 || response.status === 503) {
-      message = 'Server wake ho raha hai, 5-10 second baad dubara try karein'
-    }
-
-    lastError = new Error(message)
-    break
   }
 
   throw lastError || new Error('Download failed')
@@ -200,7 +170,7 @@ function App() {
   const [editCustomerName, setEditCustomerName] = useState('')
   const [editCustomerPhone, setEditCustomerPhone] = useState('')
   const [customerAddress, setCustomerAddress] = useState('')
-const [editCustomerAddress, setEditCustomerAddress] = useState('')
+  const [editCustomerAddress, setEditCustomerAddress] = useState('')
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentNote, setPaymentNote] = useState('')
   const [entryType, setEntryType] = useState<'debit' | 'credit'>('debit')
@@ -237,24 +207,28 @@ const [editCustomerAddress, setEditCustomerAddress] = useState('')
   }, [entries])
 
   const loadCustomers = async () => {
-    const data = await requestJson<Customer[]>('/api/customers')
-    setCustomers(data)
-    
-    // Load summaries for all customers to show dashboard stats
-    const summaryPromises = data.map(async (customer) => {
-      try {
-        const s = await requestJson<Summary>(`/api/customers/${customer.id}/summary`)
-        return { id: customer.id, summary: s }
-      } catch (e) {
-        return { id: customer.id, summary: { balance: 0, totalDebit: 0, totalCredit: 0 } }
-      }
-    })
-    const loadedSummaries = await Promise.all(summaryPromises)
-    const summaryMap: Record<number, Summary> = {}
-    loadedSummaries.forEach(item => {
-      summaryMap[item.id] = item.summary
-    })
-    setCustomerSummaries(summaryMap)
+    try {
+      const resp = await api.get('/customers')
+      const data = resp.data as Customer[]
+      setCustomers(data)
+      
+      const summaryPromises = data.map(async (customer) => {
+        try {
+          const sResp = await api.get(`/customers/${customer.id}/summary`)
+          return { id: customer.id, summary: sResp.data }
+        } catch (e) {
+          return { id: customer.id, summary: { balance: 0, totalDebit: 0, totalCredit: 0 } }
+        }
+      })
+      const loadedSummaries = await Promise.all(summaryPromises)
+      const summaryMap: Record<number, Summary> = {}
+      loadedSummaries.forEach(item => {
+        summaryMap[item.id] = item.summary
+      })
+      setCustomerSummaries(summaryMap)
+    } catch (error) {
+       console.error('Failed to load customers', error)
+    }
   }
 
   const dashboardStats = useMemo(() => {
@@ -273,22 +247,11 @@ const [editCustomerAddress, setEditCustomerAddress] = useState('')
   }, [customers, customerSummaries])
 
   const getWhatsappLink = (customer: Customer, balanceValue: number) => {
-    const message = [
-      `Namaste ${customer.name},`,
-      `Aapka baki balance Rs. ${balanceValue.toFixed(2)} hai.`,
-      'Kripya apna khata clear kar dein.',
-      'Dhanyavaad.',
-    ].join(' ')
-
-    return buildWhatsappLink(customer.phone || '', message)
-  }
-
-  const buildWhatsappLink = (phoneValue: string, message: string) => {
-    const phone = phoneValue.replace(/\D/g, '')
+    const message = `Namaste ${customer.name}, Aapka baki balance Rs. ${balanceValue.toFixed(2)} hai. Kripya apna khata clear kar dein. Dhanyavaad.`
+    const phone = (customer.phone || '').replace(/\D/g, '')
     if (!phone) {
       throw new Error('Valid phone number required for WhatsApp')
     }
-
     return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`
   }
 
@@ -307,19 +270,27 @@ const [editCustomerAddress, setEditCustomerAddress] = useState('')
   }
 
   const loadLedger = async (customerId: number) => {
-    const [entriesData, summaryData, agingData] = await Promise.all([
-      requestJson<LedgerEntry[]>(`/api/customers/${customerId}/entries`),
-      requestJson<Summary>(`/api/customers/${customerId}/summary`),
-      requestJson<Aging>(`/api/customers/${customerId}/aging`),
-    ])
-    setEntries(entriesData)
-    setSummary(summaryData)
-    setAging(agingData)
+    try {
+      const [entriesResp, summaryResp, agingResp] = await Promise.all([
+        api.get(`/customers/${customerId}/entries`),
+        api.get(`/customers/${customerId}/summary`),
+        api.get(`/customers/${customerId}/aging`),
+      ])
+      setEntries(entriesResp.data)
+      setSummary(summaryResp.data)
+      setAging(agingResp.data)
+    } catch (e) {
+      console.error('Failed to load ledger context')
+    }
   }
 
   const loadAuditLogs = async () => {
-    const data = await requestJson<AuditLog[]>('/api/audit-logs?limit=40')
-    setAuditLogs(data)
+    try {
+      const resp = await api.get('/audit-logs?limit=40')
+      setAuditLogs(resp.data)
+    } catch (e) {
+      console.error('Failed to load audit logs')
+    }
   }
 
   useEffect(() => {
@@ -341,18 +312,14 @@ const [editCustomerAddress, setEditCustomerAddress] = useState('')
       return
     }
     try {
-      await requestJson('/api/customers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: customerName, phone: customerPhone, address: customerAddress }),
-      })
+      await api.post('/customers', { name: customerName, phone: customerPhone, address: customerAddress })
       setCustomerName('')
       setCustomerPhone('')
       setCustomerAddress('')
       await loadCustomers()
       await loadAuditLogs()
-    } catch (error) {
-      alert((error as Error).message)
+    } catch (error: any) {
+      alert(error.response?.data?.error || error.message)
     }
   }
 
@@ -393,19 +360,15 @@ const [editCustomerAddress, setEditCustomerAddress] = useState('')
     }
 
     try {
-      await requestJson(`/api/customers/${selectedCustomerId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-  name: editCustomerName,
-  phone: editCustomerPhone,
-  address: editCustomerAddress,
-}),
+      await api.put(`/customers/${selectedCustomerId}`, {
+        name: editCustomerName,
+        phone: editCustomerPhone,
+        address: editCustomerAddress,
       })
       await loadCustomers()
       await loadAuditLogs()
-    } catch (error) {
-      alert((error as Error).message)
+    } catch (error: any) {
+      alert(error.response?.data?.error || error.message)
     }
   }
 
@@ -421,24 +384,20 @@ const [editCustomerAddress, setEditCustomerAddress] = useState('')
       return
     }
     try {
-      await requestJson(`/api/customers/${selectedCustomerId}/entries`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          entryType: 'credit',
-          itemName: 'Payment',
-          quantity: 1,
-          rate: amount,
-          affectsBalance: true,
-          note: paymentNote,
-        }),
+      await api.post(`/customers/${selectedCustomerId}/entries`, {
+        entryType: 'credit',
+        itemName: 'Payment',
+        quantity: 1,
+        rate: amount,
+        affectsBalance: true,
+        note: paymentNote,
       })
       setPaymentAmount('')
       setPaymentNote('')
       await loadLedger(selectedCustomerId)
       await loadAuditLogs()
-    } catch (error) {
-      alert((error as Error).message)
+    } catch (error: any) {
+      alert(error.response?.data?.error || error.message)
     }
   }
 
@@ -466,18 +425,14 @@ const [editCustomerAddress, setEditCustomerAddress] = useState('')
     const isPaidNowSale = entryType === 'credit' || isCashSale
 
     try {
-      await requestJson(`/api/customers/${selectedCustomerId}/entries`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          entryType,
-          itemName: entryItemName,
-          quantity,
-          rate,
-          unit: entryUnit,
-          affectsBalance: !isPaidNowSale,
-          note: entryNote,
-        }),
+      await api.post(`/customers/${selectedCustomerId}/entries`, {
+        entryType,
+        itemName: entryItemName,
+        quantity,
+        rate,
+        unit: entryUnit,
+        affectsBalance: !isPaidNowSale,
+        note: entryNote,
       })
       setEntryItemName('')
       setEntryQuantity('')
@@ -487,30 +442,29 @@ const [editCustomerAddress, setEditCustomerAddress] = useState('')
       setIsCashSale(false)
       await loadLedger(selectedCustomerId)
       await loadAuditLogs()
-    } catch (error) {
-      alert((error as Error).message)
+    } catch (error: any) {
+      alert(error.response?.data?.error || error.message)
     }
   }
 
   const handleEntryDelete = async (entryId: number) => {
-  const ok = window.confirm('Is entry ko delete karna chahte ho?')
-  if (!ok) return
-  try {
-    await fetch(apiUrl(`/api/customers/${selectedCustomerId}/entries/${entryId}`), { method: 'DELETE' })
-    await loadLedger(selectedCustomerId!)
-    await loadAuditLogs()
-  } catch (error) {
-    alert((error as Error).message)
+    const ok = window.confirm('Is entry ko delete karna chahte ho?')
+    if (!ok) return
+    try {
+      await api.delete(`/customers/${selectedCustomerId}/entries/${entryId}`)
+      await loadLedger(selectedCustomerId!)
+      await loadAuditLogs()
+    } catch (error: any) {
+      alert(error.response?.data?.error || error.message)
+    }
   }
-}
-
 
   const handleCustomersCsvDownload = async () => {
     try {
       setDownloadTarget('customers')
-      await downloadFile('/api/export/customers.csv', 'customers-summary.csv', 1)
-    } catch (error) {
-      alert((error as Error).message)
+      await downloadFile('/export/customers.csv', 'customers-summary.csv', 1)
+    } catch (error: any) {
+      alert(error.message)
     } finally {
       setDownloadTarget(null)
     }
@@ -525,24 +479,19 @@ const [editCustomerAddress, setEditCustomerAddress] = useState('')
     try {
       setDownloadTarget('ledger')
       await downloadFile(
-        `/api/export/customers/${selectedCustomerId}/ledger.csv`,
+        `/export/ledger/${selectedCustomerId}.csv`,
         `customer-${selectedCustomerId}-ledger.csv`,
         1
       )
-    } catch (error) {
-      alert((error as Error).message)
+    } catch (error: any) {
+      alert(error.message)
     } finally {
       setDownloadTarget(null)
     }
   }
 
   return (
-    <div className="app">
-      <header className="app-header">
-        <h1>Khata Manager</h1>
-        <p>Hello Lala Ji.</p>
-      </header>
-
+    <div className="app-container">
       <main className="layout">
         <section className="panel">
           <div className="panel-header">
@@ -569,8 +518,7 @@ const [editCustomerAddress, setEditCustomerAddress] = useState('')
               onChange={setCustomerPhone}
               placeholder="Phone"
             />
-
-                        <TextField
+            <TextField
               label="Address (optional)"
               value={customerAddress}
               onChange={setCustomerAddress}
@@ -582,9 +530,7 @@ const [editCustomerAddress, setEditCustomerAddress] = useState('')
             {customers.map((customer) => (
               <li
                 key={customer.id}
-                className={`list-item${
-                  selectedCustomerId === customer.id ? ' selected' : ''
-                }`}
+                className={`list-item ${selectedCustomerId === customer.id ? 'selected' : ''}`}
                 onClick={() => handleSelectCustomer(customer)}
               >
                 <div className="list-item-content">
@@ -596,15 +542,8 @@ const [editCustomerAddress, setEditCustomerAddress] = useState('')
                   className="btn-whatsapp"
                   onClick={(event) => {
                     event.stopPropagation()
-                    const customerSummary = selectedCustomerId === customer.id && summary
-                      ? summary
-                      : null
-                    const balanceValue = customerSummary?.balance ?? 0
-                    if (selectedCustomerId !== customer.id) {
-                      alert('Pehle is customer ko select karke uska current balance load kar lo')
-                      return
-                    }
-                    sendWhatsappReminder(customer, balanceValue)
+                    const bal = customerSummaries[customer.id]?.balance ?? 0
+                    sendWhatsappReminder(customer, bal)
                   }}
                 >
                   WhatsApp
@@ -617,18 +556,6 @@ const [editCustomerAddress, setEditCustomerAddress] = useState('')
         <section className="panel">
           <div className="panel-header">
             <h2>Customer Dashboard</h2>
-            {selectedCustomerId ? (
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={handleCustomerLedgerCsvDownload}
-                disabled={downloadTarget !== null}
-              >
-                {downloadTarget === 'ledger'
-                  ? 'Preparing CSV...'
-                  : 'Download Customer (CSV)'}
-              </button>
-            ) : null}
           </div>
 
           <div className="inventory-overview-grid">
@@ -783,10 +710,8 @@ const [editCustomerAddress, setEditCustomerAddress] = useState('')
                     onChange={setEditCustomerPhone}
                     placeholder="Phone"
                   />
-
                  <TextField
                     label="Address (optional)"
-                        
                     value={editCustomerAddress}       
                     onChange={setEditCustomerAddress}     
                     placeholder="Address"
@@ -943,27 +868,27 @@ const [editCustomerAddress, setEditCustomerAddress] = useState('')
                         <td>{entry.amount.toFixed(2)}</td>
                         <td>{entry.note ?? ''}</td>
                         <td>
-  <button
-    type="button"
-    className="btn-danger"
-    onClick={() => handleEntryDelete(entry.id)}
-  >
-    Delete
-  </button>
-</td>
+                          <button
+                            type="button"
+                            className="btn-danger"
+                            onClick={() => handleEntryDelete(entry.id)}
+                          >
+                            Delete
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                <tfoot>
-  <tr>
-    <td colSpan={3}>Total</td>
-    <td>{totalRow.qty.toFixed(2)}</td>
-    <td>-</td>
-    <td>{totalRow.amount.toFixed(2)}</td>
-    <td></td>
-    <td></td>
-  </tr>
-</tfoot>
+                  <tr>
+                    <td colSpan={3}>Total</td>
+                    <td>{totalRow.qty.toFixed(2)}</td>
+                    <td>-</td>
+                    <td>{totalRow.amount.toFixed(2)}</td>
+                    <td></td>
+                    <td></td>
+                  </tr>
+                </tfoot>
                 </table>
               </div>
             </div>
