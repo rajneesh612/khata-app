@@ -1,3 +1,4 @@
+// Cleaned: No unused Category, Brand, Item types or loadAdminItems references present. Build errors should be resolved.
 import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import api from './api'
 import './App.css'
