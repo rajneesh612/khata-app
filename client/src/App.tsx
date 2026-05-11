@@ -58,13 +58,6 @@ type AuditLog = {
   created_at: string
 }
 
-type VendorOrderDraft = {
-  itemId: number
-  vendorPhone: string
-  quantity: string
-  note: string
-}
-
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 
 const apiUrl = (path: string) => {
@@ -227,47 +220,20 @@ const [editCustomerAddress, setEditCustomerAddress] = useState('')
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentNote, setPaymentNote] = useState('')
   const [entryType, setEntryType] = useState<'debit' | 'credit'>('debit')
-  const [selectedCategoryId, setSelectedCategoryId] = useState('')
-  const [selectedBrandId, setSelectedBrandId] = useState('')
-  const [selectedItemId, setSelectedItemId] = useState('')
+  const [entryItemName, setEntryItemName] = useState('')
   const [entryQuantity, setEntryQuantity] = useState('')
   const [entryRate, setEntryRate] = useState('')
   const [entryUnit, setEntryUnit] = useState('')
   const [entryNote, setEntryNote] = useState('')
   const [isCashSale, setIsCashSale] = useState(false)
-  const [vendorOrderDraft, setVendorOrderDraft] = useState<VendorOrderDraft | null>(null)
+  const [customerSummaries, setCustomerSummaries] = useState<Record<number, Summary>>({})
+  const [isOutstandingModalOpen, setIsOutstandingModalOpen] = useState(false)
 
-  const [categoryName, setCategoryName] = useState('')
-  const [brandName, setBrandName] = useState('')
-  const [brandCategoryId, setBrandCategoryId] = useState('')
-  const [itemName, setItemName] = useState('')
-  const [itemCategoryId, setItemCategoryId] = useState('')
-  const [itemBrandId, setItemBrandId] = useState('')
-  const [itemRate, setItemRate] = useState('')
-  const [itemUnit, setItemUnit] = useState('')
-  const [itemStockQuantity, setItemStockQuantity] = useState('')
-  const [itemLowStockThreshold, setItemLowStockThreshold] = useState('5')
-  const [editingItemId, setEditingItemId] = useState<number | null>(null)
-  const [editItemName, setEditItemName] = useState('')
-  const [editItemCategoryId, setEditItemCategoryId] = useState('')
-  const [editItemBrandId, setEditItemBrandId] = useState('')
-  const [editItemRate, setEditItemRate] = useState('')
-  const [editItemUnit, setEditItemUnit] = useState('')
-  const [editItemStockQuantity, setEditItemStockQuantity] = useState('')
-  const [editItemLowStockThreshold, setEditItemLowStockThreshold] = useState('5')
   const [downloadTarget, setDownloadTarget] = useState<null | 'customers' | 'ledger'>(null)
 
   const selectedCustomer = useMemo(
     () => customers.find((customer) => customer.id === selectedCustomerId) ?? null,
     [customers, selectedCustomerId]
-  )
-
-  const vendorOrderItem = useMemo(
-    () =>
-      vendorOrderDraft
-        ? adminItems.find((item) => item.id === vendorOrderDraft.itemId) ?? null
-        : null,
-    [adminItems, vendorOrderDraft]
   )
 
   const totalRow = useMemo(() => {
@@ -286,75 +252,41 @@ const [editCustomerAddress, setEditCustomerAddress] = useState('')
     return { qty, amount }
   }, [entries])
 
-  const inventorySummary = useMemo(() => {
-    const outOfStock = adminItems.filter((item) => Number(item.stock_quantity) <= 0)
-    const lowStock = adminItems.filter(
-      (item) =>
-        Number(item.stock_quantity) > 0 &&
-        Number(item.stock_quantity) <= Number(item.low_stock_threshold)
-    )
-    const healthyStock = adminItems.filter(
-      (item) => Number(item.stock_quantity) > Number(item.low_stock_threshold)
-    )
-    const totalUnits = adminItems.reduce(
-      (sum, item) => sum + Number(item.stock_quantity || 0),
-      0
-    )
-
-    return {
-      outOfStock,
-      lowStock,
-      healthyStock,
-      totalUnits,
-      criticalItems: [...outOfStock, ...lowStock].sort(
-        (left, right) => Number(left.stock_quantity) - Number(right.stock_quantity)
-      ),
-    }
-  }, [adminItems])
-
-  const categoryOptions = categories.map((category) => ({
-    value: String(category.id),
-    label: category.name,
-  }))
-  const adminBrandOptions = allBrands
-    .filter((brand) => (itemCategoryId ? String(brand.category_id) === itemCategoryId : true))
-    .map((brand) => ({
-      value: String(brand.id),
-      label: brand.name,
-    }))
-  const editBrandOptions = allBrands
-    .filter((brand) =>
-      editItemCategoryId ? String(brand.category_id) === editItemCategoryId : true
-    )
-    .map((brand) => ({
-      value: String(brand.id),
-      label: brand.name,
-    }))
-  const customerBrandOptions = allBrands
-    .filter((brand) =>
-      selectedCategoryId ? String(brand.category_id) === selectedCategoryId : true
-    )
-    .map((brand) => ({
-      value: String(brand.id),
-      label: brand.name,
-    }))
-  const customerItems = adminItems.filter((item) => {
-    if (selectedCategoryId && String(item.category_id) !== selectedCategoryId) {
-      return false
-    }
-    if (selectedBrandId && String(item.brand_id) !== selectedBrandId) {
-      return false
-    }
-    return true
-  })
-  const customerItemOptions = customerItems.map((item) => ({
-    value: String(item.id),
-    label: `${item.name}${item.unit ? ` (${item.unit})` : ''} | Stock ${item.stock_quantity}`,
-  }))
   const loadCustomers = async () => {
     const data = await requestJson<Customer[]>('/api/customers')
     setCustomers(data)
+    
+    // Load summaries for all customers to show dashboard stats
+    const summaryPromises = data.map(async (customer) => {
+      try {
+        const s = await requestJson<Summary>(`/api/customers/${customer.id}/summary`)
+        return { id: customer.id, summary: s }
+      } catch (e) {
+        return { id: customer.id, summary: { balance: 0, totalDebit: 0, totalCredit: 0 } }
+      }
+    })
+    const loadedSummaries = await Promise.all(summaryPromises)
+    const summaryMap: Record<number, Summary> = {}
+    loadedSummaries.forEach(item => {
+      summaryMap[item.id] = item.summary
+    })
+    setCustomerSummaries(summaryMap)
   }
+
+  const dashboardStats = useMemo(() => {
+    const totalOutstanding = Object.values(customerSummaries).reduce((sum, s) => sum + s.balance, 0)
+    const topDebtors = customers
+      .map(c => ({ 
+        name: c.name, 
+        balance: customerSummaries[c.id]?.balance || 0,
+        id: c.id
+      }))
+      .filter(c => c.balance > 0)
+      .sort((a, b) => b.balance - a.balance)
+      .slice(0, 5)
+
+    return { totalOutstanding, topDebtors }
+  }, [customers, customerSummaries])
 
   const getWhatsappLink = (customer: Customer, balanceValue: number) => {
     const message = [
@@ -376,19 +308,6 @@ const [editCustomerAddress, setEditCustomerAddress] = useState('')
     return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`
   }
 
-  const buildCallLink = (phoneValue: string) => {
-    const phone = phoneValue.replace(/\D/g, '')
-    if (!phone) {
-      throw new Error('Valid phone number required to call vendor')
-    }
-
-    return `tel:${phone}`
-  }
-
-  const getSuggestedVendorOrderQuantity = (item: Item) => {
-    return Math.max(Math.ceil(Number(item.low_stock_threshold) * 2 - Number(item.stock_quantity)), 1)
-  }
-
   const sendWhatsappReminder = (customer: Customer, balanceValue: number) => {
     if (balanceValue <= 0) {
       alert('Is customer ka outstanding balance nahi hai')
@@ -398,66 +317,6 @@ const [editCustomerAddress, setEditCustomerAddress] = useState('')
     try {
       const link = getWhatsappLink(customer, balanceValue)
       window.open(link, '_blank', 'noopener,noreferrer')
-    } catch (error) {
-      alert((error as Error).message)
-    }
-  }
-
-  const openVendorOrderModal = (item: Item) => {
-    setVendorOrderDraft({
-      itemId: item.id,
-      vendorPhone: '',
-      quantity: String(getSuggestedVendorOrderQuantity(item)),
-      note: '',
-    })
-  }
-
-  const closeVendorOrderModal = () => {
-    setVendorOrderDraft(null)
-  }
-
-  const submitVendorOrder = () => {
-    if (!vendorOrderDraft || !vendorOrderItem) {
-      return
-    }
-
-    const quantity = Number(vendorOrderDraft.quantity)
-    if (!Number.isFinite(quantity) || quantity <= 0) {
-      alert('Order quantity positive honi chahiye')
-      return
-    }
-
-    const brandName = allBrands.find((brand) => brand.id === vendorOrderItem.brand_id)?.name || 'Vendor'
-    const categoryName = categories.find((category) => category.id === vendorOrderItem.category_id)?.name || ''
-    const message = [
-      `Namaste ${brandName},`,
-      `Mujhe ${vendorOrderItem.name}${vendorOrderItem.unit ? ` (${vendorOrderItem.unit})` : ''} ka naya order place karna hai.`,
-      `Required quantity: ${quantity}`,
-      `Current stock: ${vendorOrderItem.stock_quantity}`,
-      `Category: ${categoryName}`,
-      vendorOrderDraft.note ? `Note: ${vendorOrderDraft.note}` : '',
-      'Please confirm availability and delivery.',
-    ]
-      .filter(Boolean)
-      .join(' ')
-
-    try {
-      const link = buildWhatsappLink(vendorOrderDraft.vendorPhone, message)
-      window.open(link, '_blank', 'noopener,noreferrer')
-      closeVendorOrderModal()
-    } catch (error) {
-      alert((error as Error).message)
-    }
-  }
-
-  const callVendor = () => {
-    if (!vendorOrderDraft) {
-      return
-    }
-
-    try {
-      const link = buildCallLink(vendorOrderDraft.vendorPhone)
-      window.open(link, '_self')
     } catch (error) {
       alert((error as Error).message)
     }
@@ -496,43 +355,8 @@ const [editCustomerAddress, setEditCustomerAddress] = useState('')
 
   useEffect(() => {
     loadCustomers()
-    loadCategories()
-    loadAllBrands()
-    loadAdminItems()
     loadAuditLogs()
   }, [])
-
-  useEffect(() => {
-    if (!itemCategoryId) {
-      setItemBrandId('')
-      return
-    }
-    if (itemBrandId) {
-      const stillValid = allBrands.some(
-        (brand) => String(brand.id) === itemBrandId && String(brand.category_id) === itemCategoryId
-      )
-      if (!stillValid) {
-        setItemBrandId('')
-      }
-    }
-  }, [itemCategoryId, itemBrandId, allBrands])
-
-  useEffect(() => {
-    if (!editItemCategoryId) {
-      setEditItemBrandId('')
-      return
-    }
-    if (editItemBrandId) {
-      const stillValid = allBrands.some(
-        (brand) =>
-          String(brand.id) === editItemBrandId &&
-          String(brand.category_id) === editItemCategoryId
-      )
-      if (!stillValid) {
-        setEditItemBrandId('')
-      }
-    }
-  }, [editItemCategoryId, editItemBrandId, allBrands])
 
   useEffect(() => {
     if (selectedCustomer) {
@@ -541,50 +365,6 @@ const [editCustomerAddress, setEditCustomerAddress] = useState('')
       setEditCustomerAddress(selectedCustomer.address || '')
     }
   }, [selectedCustomer])
-
-  useEffect(() => {
-    if (!selectedCategoryId) {
-      setSelectedBrandId('')
-      setSelectedItemId('')
-      return
-    }
-
-    if (selectedBrandId) {
-      const stillValid = allBrands.some(
-        (brand) =>
-          String(brand.id) === selectedBrandId &&
-          String(brand.category_id) === selectedCategoryId
-      )
-      if (!stillValid) {
-        setSelectedBrandId('')
-      }
-    }
-  }, [selectedCategoryId, selectedBrandId, allBrands])
-
-  useEffect(() => {
-    if (!selectedBrandId) {
-      setSelectedItemId('')
-      return
-    }
-
-    if (selectedItemId) {
-      const stillValid = customerItems.some((item) => String(item.id) === selectedItemId)
-      if (!stillValid) {
-        setSelectedItemId('')
-      }
-    }
-  }, [selectedBrandId, selectedItemId, customerItems])
-
-  useEffect(() => {
-    const item = customerItems.find((entry) => String(entry.id) === selectedItemId)
-    if (item) {
-      setEntryRate(item.default_rate ? String(item.default_rate) : '')
-      setEntryUnit(item.unit || '')
-    } else {
-      setEntryRate('')
-      setEntryUnit('')
-    }
-  }, [customerItems, selectedItemId])
 
   const handleCustomerSubmit = async (event: FormEvent) => {
     event.preventDefault()
@@ -611,9 +391,7 @@ const [editCustomerAddress, setEditCustomerAddress] = useState('')
     setPaymentAmount('')
     setPaymentNote('')
     setEntryType('debit')
-    setSelectedCategoryId('')
-    setSelectedBrandId('')
-    setSelectedItemId('')
+    setEntryItemName('')
     setEntryQuantity('')
     setEntryRate('')
     setEntryUnit('')
@@ -701,8 +479,8 @@ const [editCustomerAddress, setEditCustomerAddress] = useState('')
       alert('Select a customer first')
       return
     }
-    if (!selectedItemId) {
-      alert('Item selection required')
+    if (!entryItemName.trim()) {
+      alert('Item name required')
       return
     }
     const quantity = Number(entryQuantity)
@@ -716,22 +494,6 @@ const [editCustomerAddress, setEditCustomerAddress] = useState('')
       return
     }
 
-    const item = customerItems.find((entry) => String(entry.id) === selectedItemId)
-    if (!item) {
-      alert('Invalid item selection')
-      return
-    }
-    if (Number(item.stock_quantity) <= 0) {
-      alert('Is item ka stock khatam ho gaya hai. Order create nahi ho sakta.')
-      return
-    }
-    if (quantity > Number(item.stock_quantity)) {
-      alert(
-        `Sirf ${Number(item.stock_quantity)} unit stock me hai. Itni quantity ka order create nahi ho sakta.`
-      )
-      return
-    }
-
     const isPaidNowSale = entryType === 'credit' || isCashSale
 
     try {
@@ -740,8 +502,7 @@ const [editCustomerAddress, setEditCustomerAddress] = useState('')
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           entryType,
-          itemId: item.id,
-          itemName: item.name,
+          itemName: entryItemName,
           quantity,
           rate,
           unit: entryUnit,
@@ -749,186 +510,13 @@ const [editCustomerAddress, setEditCustomerAddress] = useState('')
           note: entryNote,
         }),
       })
+      setEntryItemName('')
       setEntryQuantity('')
+      setEntryRate('')
+      setEntryUnit('')
       setEntryNote('')
       setIsCashSale(false)
       await loadLedger(selectedCustomerId)
-      await loadAdminItems()
-      await loadAuditLogs()
-    } catch (error) {
-      alert((error as Error).message)
-    }
-  }
-
-  const handleAddCategory = async (event: FormEvent) => {
-    event.preventDefault()
-    if (!categoryName.trim()) return
-    try {
-      await requestJson('/api/categories', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: categoryName }),
-      })
-      setCategoryName('')
-      await loadCategories()
-      await loadAllBrands()
-      await loadAdminItems()
-      await loadAuditLogs()
-    } catch (error) {
-      alert((error as Error).message)
-    }
-  }
-
-  const handleAddBrand = async (event: FormEvent) => {
-    event.preventDefault()
-    if (!brandName.trim() || !brandCategoryId) return
-    try {
-      await requestJson('/api/brands', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: brandName,
-          categoryId: Number(brandCategoryId),
-        }),
-      })
-      setBrandName('')
-      setBrandCategoryId('')
-      await loadAllBrands()
-      await loadAdminItems()
-      await loadAuditLogs()
-    } catch (error) {
-      alert((error as Error).message)
-    }
-  }
-
-  const handleItemSubmit = async (event: FormEvent) => {
-    event.preventDefault()
-    if (!itemName.trim() || !itemCategoryId || !itemBrandId) {
-      alert('Item, category, and brand required')
-      return
-    }
-    const defaultRate = itemRate ? Number(itemRate) : null
-    if (defaultRate !== null && (!Number.isFinite(defaultRate) || defaultRate < 0)) {
-      alert('Rate should not be negative')
-      return
-    }
-    const stockQuantity = itemStockQuantity ? Number(itemStockQuantity) : 0
-    const lowStockThreshold = itemLowStockThreshold ? Number(itemLowStockThreshold) : 5
-    if (!Number.isFinite(stockQuantity) || stockQuantity < 0) {
-      alert('Stock quantity negative nahi ho sakti')
-      return
-    }
-    if (!Number.isFinite(lowStockThreshold) || lowStockThreshold < 0) {
-      alert('Low stock threshold negative nahi ho sakta')
-      return
-    }
-
-    try {
-      await requestJson('/api/items', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: itemName,
-          categoryId: Number(itemCategoryId),
-          brandId: Number(itemBrandId),
-          defaultRate: defaultRate === null ? undefined : defaultRate,
-          unit: itemUnit,
-          stockQuantity,
-          lowStockThreshold,
-        }),
-      })
-      setItemName('')
-      setItemCategoryId('')
-      setItemBrandId('')
-      setItemRate('')
-      setItemUnit('')
-      setItemStockQuantity('')
-      setItemLowStockThreshold('5')
-      await loadAdminItems()
-      await loadAuditLogs()
-    } catch (error) {
-      alert((error as Error).message)
-    }
-  }
-
-  const handleItemEdit = (item: Item) => {
-    setEditingItemId(item.id)
-    setEditItemName(item.name)
-    setEditItemCategoryId(String(item.category_id))
-    setEditItemBrandId(String(item.brand_id))
-    setEditItemRate(item.default_rate ? String(item.default_rate) : '')
-    setEditItemUnit(item.unit || '')
-    setEditItemStockQuantity(String(item.stock_quantity))
-    setEditItemLowStockThreshold(String(item.low_stock_threshold))
-  }
-
-  const resetInlineEdit = () => {
-    setEditingItemId(null)
-    setEditItemName('')
-    setEditItemCategoryId('')
-    setEditItemBrandId('')
-    setEditItemRate('')
-    setEditItemUnit('')
-    setEditItemStockQuantity('')
-    setEditItemLowStockThreshold('5')
-  }
-
-  const handleInlineItemSubmit = async (event: FormEvent) => {
-    event.preventDefault()
-    if (!editingItemId) {
-      return
-    }
-    if (!editItemName.trim() || !editItemCategoryId || !editItemBrandId) {
-      alert('Item, category, and brand required')
-      return
-    }
-
-    const defaultRate = editItemRate ? Number(editItemRate) : null
-    if (defaultRate !== null && (!Number.isFinite(defaultRate) || defaultRate < 0)) {
-      alert('Rate should not be negative')
-      return
-    }
-    const stockQuantity = editItemStockQuantity ? Number(editItemStockQuantity) : 0
-    const lowStockThreshold = editItemLowStockThreshold
-      ? Number(editItemLowStockThreshold)
-      : 5
-    if (!Number.isFinite(stockQuantity) || stockQuantity < 0) {
-      alert('Stock quantity negative nahi ho sakti')
-      return
-    }
-    if (!Number.isFinite(lowStockThreshold) || lowStockThreshold < 0) {
-      alert('Low stock threshold negative nahi ho sakta')
-      return
-    }
-
-    try {
-      await requestJson(`/api/items/${editingItemId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: editItemName,
-          categoryId: Number(editItemCategoryId),
-          brandId: Number(editItemBrandId),
-          defaultRate: defaultRate === null ? undefined : defaultRate,
-          unit: editItemUnit,
-          stockQuantity,
-          lowStockThreshold,
-        }),
-      })
-      resetInlineEdit()
-      await loadAdminItems()
-      await loadAuditLogs()
-    } catch (error) {
-      alert((error as Error).message)
-    }
-  }
-
-  const handleItemDelete = async (itemId: number) => {
-    const ok = window.confirm('Delete this item?')
-    if (!ok) return
-    try {
-      await fetch(apiUrl(`/api/items/${itemId}`), { method: 'DELETE' })
-      await loadAdminItems()
       await loadAuditLogs()
     } catch (error) {
       alert((error as Error).message)
@@ -1072,7 +660,7 @@ const [editCustomerAddress, setEditCustomerAddress] = useState('')
 
         <section className="panel">
           <div className="panel-header">
-            <h2>Inventory Dashboard</h2>
+            <h2>Customer Dashboard</h2>
             {selectedCustomerId ? (
               <button
                 type="button"
@@ -1088,26 +676,37 @@ const [editCustomerAddress, setEditCustomerAddress] = useState('')
           </div>
 
           <div className="inventory-overview-grid">
-            <div className="inventory-stat-card danger">
-              <span className="inventory-stat-label">Out of Stock</span>
-              <strong>{inventorySummary.outOfStock.length}</strong>
-              <p>Ye items abhi turant refill maang rahe hain.</p>
+            <div 
+              className="inventory-stat-card danger clickable-card"
+              onClick={() => setIsOutstandingModalOpen(true)}
+              style={{ cursor: 'pointer' }}
+            >
+              <span className="inventory-stat-label">Total Outstanding</span>
+              <strong>Rs. {dashboardStats.totalOutstanding.toFixed(2)}</strong>
+              <p>Sabhi customers ka milakar kul udhaar. (View All)</p>
             </div>
-            <div className="inventory-stat-card warning">
-              <span className="inventory-stat-label">Low Stock</span>
-              <strong>{inventorySummary.lowStock.length}</strong>
-              <p>Threshold ke neeche ya uske paas chal rahe items.</p>
-            </div>
-            <div className="inventory-stat-card success">
-              <span className="inventory-stat-label">Healthy Stock</span>
-              <strong>{inventorySummary.healthyStock.length}</strong>
-              <p>Normal stock level par available items.</p>
-            </div>
-            <div className="inventory-stat-card neutral">
-              <span className="inventory-stat-label">Total Units</span>
-              <strong>{inventorySummary.totalUnits.toFixed(0)}</strong>
-              <p>Sabhi tracked items ka current stock total.</p>
-            </div>
+            {dashboardStats.topDebtors.map((debtor, index) => (
+              <div 
+                key={debtor.id} 
+                className="inventory-stat-card warning clickable-card"
+                onClick={() => {
+                  const customer = customers.find(c => c.id === debtor.id);
+                  if (customer) handleSelectCustomer(customer);
+                }}
+                style={{ cursor: 'pointer' }}
+              >
+                <span className="inventory-stat-label">Top Debtor #{index + 1}</span>
+                <strong>{debtor.name}</strong>
+                <p>Balance: Rs. {debtor.balance.toFixed(2)}</p>
+              </div>
+            ))}
+            {dashboardStats.topDebtors.length === 0 && (
+              <div className="inventory-stat-card success">
+                <span className="inventory-stat-label">All Clear!</span>
+                <strong>Sab Paid Hai</strong>
+                <p>Abhi kisi ka koi bada udhaar baki nahi hai.</p>
+              </div>
+            )}
           </div>
 
           {selectedCustomer && summary ? (
@@ -1144,320 +743,10 @@ const [editCustomerAddress, setEditCustomerAddress] = useState('')
               <h3>Customer summary optional hai</h3>
               <p>
                 Left side se customer select karoge to uska balance aur WhatsApp reminder
-                yahin dikh jayega. Inventory alerts neeche hamesha visible rahenge.
+                yahin dikh jayega.
               </p>
             </div>
           )}
-
-          <div className="inventory-critical-card">
-            <div className="panel-header">
-              <h3>Critical Inventory Alerts</h3>
-              <span className="muted">
-                {inventorySummary.criticalItems.length} items ko action chahiye
-              </span>
-            </div>
-            {inventorySummary.criticalItems.length === 0 ? (
-              <div className="empty-state-card inventory-empty-state">
-                <h3>Sab theek chal raha hai</h3>
-                <p>Kisi bhi item ka stock abhi alert zone me nahi hai.</p>
-              </div>
-            ) : (
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Item</th>
-                      <th>Category</th>
-                      <th>Brand</th>
-                      <th>Stock</th>
-                      <th>Threshold</th>
-                      <th>Status</th>
-                      <th>Order</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {inventorySummary.criticalItems.map((item) => {
-                      const isOut = Number(item.stock_quantity) <= 0
-                      return (
-                        <tr key={item.id} className={isOut ? 'stock-row-danger' : 'stock-row-warning'}>
-                          <td>
-                            {item.name}
-                            {item.unit ? <span className="muted"> ({item.unit})</span> : null}
-                          </td>
-                          <td>{categoryMap.get(item.category_id) || '-'}</td>
-                          <td>{brandMap.get(item.brand_id) || '-'}</td>
-                          <td>{item.stock_quantity}</td>
-                          <td>{item.low_stock_threshold}</td>
-                          <td>
-                            <span className={`stock-badge ${isOut ? 'danger' : 'warning'}`}>
-                              {isOut ? 'Out of stock' : 'Low stock'}
-                            </span>
-                          </td>
-                          <td>
-                            <button
-                              type="button"
-                              className="btn-order-vendor"
-                              onClick={() => openVendorOrderModal(item)}
-                            >
-                              Place Vendor Order
-                            </button>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </section>
-
-        <section className="panel admin-panel">
-          <div className="panel-header">
-            <h2>Admin Item Management</h2>
-          </div>
-          <div className="admin-grid">
-            <div className="admin-action-card compact-card">
-              <div className="admin-action-header">
-                <h3>Add Category</h3>
-                <p>Sabse pehle nayi category banao.</p>
-              </div>
-              <form className="form-row compact-form" onSubmit={handleAddCategory}>
-                <TextField
-                  label="Category name"
-                  value={categoryName}
-                  onChange={setCategoryName}
-                  placeholder="Jaise Grocery ya Dairy"
-                />
-                <button type="submit" className="btn-action-primary compact-action-button">
-                  Save Category
-                </button>
-              </form>
-            </div>
-
-            <div className="admin-action-card compact-card">
-              <div className="admin-action-header">
-                <h3>Add Brand</h3>
-                <p>Brand ko sahi category ke andar rakho.</p>
-              </div>
-              <form className="form-row compact-form" onSubmit={handleAddBrand}>
-                <TextField
-                  label="Brand name"
-                  value={brandName}
-                  onChange={setBrandName}
-                  placeholder="Jaise Amul ya Fortune"
-                />
-                <SelectField
-                  label="Choose category"
-                  value={brandCategoryId}
-                  onChange={setBrandCategoryId}
-                  options={categoryOptions}
-                  placeholder="Select category"
-                />
-                <button type="submit" className="btn-action-primary compact-action-button">
-                  Save Brand
-                </button>
-              </form>
-            </div>
-
-            <div className="admin-action-card wide-card">
-              <div className="admin-action-header">
-                <h3>Add Item</h3>
-                <p>Item banate waqt category, brand, rate aur unit ek saath set karo.</p>
-              </div>
-              <form className="form-grid admin-item-form" onSubmit={handleItemSubmit}>
-                <TextField
-                  label="Item name"
-                  value={itemName}
-                  onChange={setItemName}
-                  placeholder="Jaise Parle-G"
-                />
-                <SelectField
-                  label="Choose category"
-                  value={itemCategoryId}
-                  onChange={setItemCategoryId}
-                  options={categoryOptions}
-                  placeholder="Select category"
-                />
-                <SelectField
-                  label="Choose brand"
-                  value={itemBrandId}
-                  onChange={setItemBrandId}
-                  options={adminBrandOptions}
-                  placeholder="Select brand"
-                  disabled={!itemCategoryId}
-                />
-                <TextField
-                  label="Default rate"
-                  value={itemRate}
-                  onChange={setItemRate}
-                  type="number"
-                  placeholder="Jaise 20"
-                />
-                <TextField
-                  label="Unit"
-                  value={itemUnit}
-                  onChange={setItemUnit}
-                  placeholder="Jaise packet ya 1L"
-                />
-                <TextField
-                  label="Current stock"
-                  value={itemStockQuantity}
-                  onChange={setItemStockQuantity}
-                  type="number"
-                  placeholder="Jaise 24"
-                />
-                <TextField
-                  label="Low stock alert"
-                  value={itemLowStockThreshold}
-                  onChange={setItemLowStockThreshold}
-                  type="number"
-                  placeholder="Jaise 5"
-                />
-                <div className="admin-form-note">
-                  Pehle category select karo, fir brand choose karo. Stock aur alert dono yahin set karo.
-                </div>
-                <button type="submit" className="span-two btn-action-primary admin-submit-button">
-                  Add New Item
-                </button>
-              </form>
-            </div>
-          </div>
-
-          <div className="table-wrap admin-items-table-wrap">
-            <table className="admin-items-table">
-              <thead>
-                <tr>
-                  <th>Item</th>
-                  <th>Category</th>
-                  <th>Brand</th>
-                  <th>Rate</th>
-                  <th>Unit</th>
-                  <th>Stock</th>
-                  <th>Alert At</th>
-                  <th>Status</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {adminItems.map((item) => (
-                  <>
-                    <tr key={item.id}>
-                      <td>{item.name}</td>
-                      <td>{categoryMap.get(item.category_id) || ''}</td>
-                      <td>{brandMap.get(item.brand_id) || ''}</td>
-                      <td>{item.default_rate ?? '-'}</td>
-                      <td>{item.unit ?? '-'}</td>
-                      <td>{item.stock_quantity}</td>
-                      <td>{item.low_stock_threshold}</td>
-                      <td className="status-cell">
-                        <div className="status-stack">
-                          {Number(item.stock_quantity) <= 0 ? (
-                            <span className="stock-badge danger">Out of stock</span>
-                          ) : Number(item.stock_quantity) <= Number(item.low_stock_threshold) ? (
-                            <span className="stock-badge warning">Low stock</span>
-                          ) : (
-                            <span className="stock-badge success">Healthy</span>
-                          )}
-                          {Number(item.stock_quantity) <= Number(item.low_stock_threshold) ? (
-                            <button
-                              type="button"
-                              className="btn-order-inline"
-                              onClick={() => openVendorOrderModal(item)}
-                            >
-                              Place vendor order
-                            </button>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td className="item-actions-cell">
-                        <div className="item-actions-row compact-actions-row">
-                          <button
-                            type="button"
-                            className="btn-secondary"
-                            onClick={() => handleItemEdit(item)}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-danger"
-                            onClick={() => handleItemDelete(item.id)}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                    {editingItemId === item.id && (
-                      <tr key={`${item.id}-editor`} className="inline-editor-row">
-                        <td colSpan={9}>
-                          <form className="form-grid inline-editor-form" onSubmit={handleInlineItemSubmit}>
-                            <TextField
-                              label="Item name"
-                              value={editItemName}
-                              onChange={setEditItemName}
-                              placeholder="Item name"
-                            />
-                            <SelectField
-                              label="Category"
-                              value={editItemCategoryId}
-                              onChange={setEditItemCategoryId}
-                              options={categoryOptions}
-                              placeholder="Select category"
-                            />
-                            <SelectField
-                              label="Brand"
-                              value={editItemBrandId}
-                              onChange={setEditItemBrandId}
-                              options={editBrandOptions}
-                              placeholder="Select brand"
-                              disabled={!editItemCategoryId}
-                            />
-                            <TextField
-                              label="Default rate"
-                              value={editItemRate}
-                              onChange={setEditItemRate}
-                              type="number"
-                              placeholder="Rate"
-                            />
-                            <TextField
-                              label="Unit"
-                              value={editItemUnit}
-                              onChange={setEditItemUnit}
-                              placeholder="Unit"
-                            />
-                            <TextField
-                              label="Current stock"
-                              value={editItemStockQuantity}
-                              onChange={setEditItemStockQuantity}
-                              type="number"
-                              placeholder="Stock"
-                            />
-                            <TextField
-                              label="Low stock alert"
-                              value={editItemLowStockThreshold}
-                              onChange={setEditItemLowStockThreshold}
-                              type="number"
-                              placeholder="Threshold"
-                            />
-                            <button type="submit">Update Item</button>
-                            <button
-                              type="button"
-                              className="btn-secondary"
-                              onClick={resetInlineEdit}
-                            >
-                              Cancel
-                            </button>
-                          </form>
-                        </td>
-                      </tr>
-                    )}
-                  </>
-                ))}
-              </tbody>
-            </table>
-          </div>
         </section>
 
         <section className="panel admin-panel">
@@ -1613,28 +902,11 @@ const [editCustomerAddress, setEditCustomerAddress] = useState('')
                     { value: 'credit', label: 'Payment (Credit)' },
                   ]}
                 />
-                <SelectField
-                  label="Category"
-                  value={selectedCategoryId}
-                  onChange={setSelectedCategoryId}
-                  options={categoryOptions}
-                  placeholder="Select category"
-                />
-                <SelectField
-                  label="Brand"
-                  value={selectedBrandId}
-                  onChange={setSelectedBrandId}
-                  options={customerBrandOptions}
-                  placeholder="Select brand"
-                  disabled={!selectedCategoryId}
-                />
-                <SelectField
-                  label="Item"
-                  value={selectedItemId}
-                  onChange={setSelectedItemId}
-                  options={customerItemOptions}
-                  placeholder="Select item"
-                  disabled={!selectedBrandId}
+                <TextField
+                  label="Item Name"
+                  value={entryItemName}
+                  onChange={setEntryItemName}
+                  placeholder="Jaise Milk, Sugar, etc."
                 />
                 <TextField
                   label="Quantity"
@@ -1654,14 +926,13 @@ const [editCustomerAddress, setEditCustomerAddress] = useState('')
                   label="Unit"
                   value={entryUnit}
                   onChange={setEntryUnit}
-                  placeholder="Unit"
-                  disabled
+                  placeholder="Jaise kg, ltr, pkt"
                 />
                 <TextField
                   label="Note"
                   value={entryNote}
                   onChange={setEntryNote}
-                  placeholder="Note"
+                  placeholder="Extra details"
                 />
                 <label className="checkbox-field span-two">
                   <input
@@ -1744,75 +1015,59 @@ const [editCustomerAddress, setEditCustomerAddress] = useState('')
         </div>
       ) : null}
 
-      {vendorOrderDraft && vendorOrderItem ? (
-        <div className="modal-backdrop" onClick={closeVendorOrderModal}>
-          <section className="vendor-order-modal" onClick={(event) => event.stopPropagation()}>
+      {isOutstandingModalOpen ? (
+        <div className="modal-backdrop" onClick={() => setIsOutstandingModalOpen(false)}>
+          <section className="customer-modal" onClick={(e) => e.stopPropagation()}>
             <div className="panel-header">
-              <div>
-                <h2>Place Vendor Order</h2>
-                <p className="muted">
-                  {vendorOrderItem.name}
-                  {vendorOrderItem.unit ? ` (${vendorOrderItem.unit})` : ''} ke liye vendor ko ready message bhejo.
-                </p>
-              </div>
-              <button type="button" className="btn-secondary" onClick={closeVendorOrderModal}>
-                Close
-              </button>
+              <h2>All Outstanding Balances</h2>
+              <button type="button" className="btn-secondary" onClick={() => setIsOutstandingModalOpen(false)}>Close</button>
             </div>
-
-            <div className="vendor-order-meta">
-              <span className="stock-badge warning">
-                Current stock {vendorOrderItem.stock_quantity}
-              </span>
-              <span className="stock-badge danger">
-                Alert at {vendorOrderItem.low_stock_threshold}
-              </span>
-            </div>
-
-            <div className="form-grid vendor-order-form-grid">
-              <TextField
-                label="Vendor phone / WhatsApp"
-                value={vendorOrderDraft.vendorPhone}
-                onChange={(value) =>
-                  setVendorOrderDraft((current) =>
-                    current ? { ...current, vendorPhone: value } : current
-                  )
-                }
-                placeholder="Jaise 9198XXXXXXXX"
-              />
-              <TextField
-                label="Order quantity"
-                value={vendorOrderDraft.quantity}
-                onChange={(value) =>
-                  setVendorOrderDraft((current) =>
-                    current ? { ...current, quantity: value } : current
-                  )
-                }
-                type="number"
-                placeholder="Required quantity"
-              />
-              <label className="field span-two">
-                <FieldLabel label="Order note" />
-                <textarea
-                  value={vendorOrderDraft.note}
-                  placeholder="Optional note for vendor"
-                  onChange={(event) =>
-                    setVendorOrderDraft((current) =>
-                      current ? { ...current, note: event.target.value } : current
-                    )
-                  }
-                  rows={4}
-                />
-              </label>
-            </div>
-
-            <div className="actions">
-              <button type="button" className="btn-call-vendor" onClick={callVendor}>
-                Call Vendor
-              </button>
-              <button type="button" className="btn-order-vendor" onClick={submitVendorOrder}>
-                Send Order on WhatsApp
-              </button>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Customer Name</th>
+                    <th>Phone</th>
+                    <th>Address</th>
+                    <th>Balance</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {customers
+                    .map(c => ({ ...c, balance: customerSummaries[c.id]?.balance || 0 }))
+                    .sort((a, b) => b.balance - a.balance)
+                    .map(c => (
+                      <tr key={c.id}>
+                        <td>{c.name}</td>
+                        <td>{c.phone || '-'}</td>
+                        <td>{c.address || '-'}</td>
+                        <td style={{ 
+                          color: c.balance > 0 ? 'var(--danger-color)' : (c.balance < 0 ? 'var(--success-color)' : 'inherit'), 
+                          fontWeight: 'bold' 
+                        }}>
+                          Rs. {Math.abs(c.balance).toFixed(2)} {c.balance > 0 ? '(Dr)' : (c.balance < 0 ? '(Cr)' : '')}
+                        </td>
+                        <td>
+                          <button 
+                            className="btn-primary" 
+                            onClick={() => {
+                              handleSelectCustomer(c);
+                              setIsOutstandingModalOpen(false);
+                            }}
+                          >
+                            Open Ledger
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  {customers.length === 0 && (
+                    <tr>
+                      <td colSpan={5} style={{ textAlign: 'center', padding: '2rem' }}>Abhi koi customer nahi hai.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </section>
         </div>
