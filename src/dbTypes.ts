@@ -1,5 +1,15 @@
+export type Shop = {
+  id: number;
+  shop_name: string;
+  owner_name: string;
+  email: string;
+  password_hash: string;
+  created_at: string;
+};
+
 export type Customer = {
   id: number;
+  shop_id: number;
   name: string;
   phone: string | null;
   address: string | null;
@@ -8,6 +18,7 @@ export type Customer = {
 
 export type LedgerEntry = {
   id: number;
+  shop_id: number;
   customer_id: number;
   item_id: number | null;
   item_name: string;
@@ -23,12 +34,14 @@ export type LedgerEntry = {
 
 export type Category = {
   id: number;
+  shop_id: number;
   name: string;
   created_at: string;
 };
 
 export type Brand = {
   id: number;
+  shop_id: number;
   name: string;
   category_id: number;
   created_at: string;
@@ -36,6 +49,7 @@ export type Brand = {
 
 export type Item = {
   id: number;
+  shop_id: number;
   name: string;
   category_id: number;
   brand_id: number;
@@ -62,6 +76,7 @@ export type LedgerAging = {
 
 export type AuditLog = {
   id: number;
+  shop_id: number;
   action: string;
   entity_type: string;
   entity_id: number | null;
@@ -69,7 +84,15 @@ export type AuditLog = {
   created_at: string;
 };
 
+export type AddShopPayload = {
+  shop_name: string;
+  owner_name: string;
+  email: string;
+  password_hash: string;
+};
+
 export type AddCustomerPayload = {
+  shop_id: number;
   name: string;
   phone?: string;
   address?: string;
@@ -77,12 +100,14 @@ export type AddCustomerPayload = {
 
 export type UpdateCustomerPayload = {
   id: number;
+  shop_id: number;
   name: string;
   phone?: string | null;
   address?: string | null;
 };
 
 export type AddLedgerEntryPayload = {
+  shop_id: number;
   customerId: number;
   itemId?: number | null;
   itemName: string;
@@ -95,15 +120,18 @@ export type AddLedgerEntryPayload = {
 };
 
 export type AddBrandPayload = {
+  shop_id: number;
   name: string;
   categoryId: number | null;
 };
 
 export type AddCategoryPayload = {
+  shop_id: number;
   name: string;
 };
 
 export type AddItemPayload = {
+  shop_id: number;
   id?: number;
   name: string;
   categoryId: number;
@@ -115,6 +143,7 @@ export type AddItemPayload = {
 };
 
 export type ItemFilters = {
+  shop_id: number;
   categoryId?: number | null;
   brandId?: number | null;
 };

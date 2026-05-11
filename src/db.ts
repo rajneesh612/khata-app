@@ -1,4 +1,3 @@
-import * as postgresDb from "./postgresDb";
 import * as sqliteDb from "./sqliteDb";
 
 export type {
@@ -7,6 +6,7 @@ export type {
   AddCustomerPayload,
   AddItemPayload,
   AddLedgerEntryPayload,
+  AddShopPayload,
   AuditLog,
   Brand,
   Category,
@@ -16,95 +16,81 @@ export type {
   ItemFilters,
   LedgerAging,
   LedgerEntry,
+  Shop,
   UpdateCustomerPayload
 } from "./dbTypes";
 
-const usePostgres = Boolean(process.env.DATABASE_URL);
+// We strictly use sqliteDb for now as requested for simplicity in the current conversion
+// but keeping the wrapper structure for future postgres support if needed.
 
 export const initDb = async (): Promise<void> => {
-  if (usePostgres) {
-    await postgresDb.initDb();
-    return;
-  }
   sqliteDb.initDb();
 };
 
-export const listCustomers = async () => {
-  return usePostgres ? postgresDb.listCustomers() : sqliteDb.listCustomers();
+export const addShop = async (...args: Parameters<typeof sqliteDb.addShop>) => {
+  return sqliteDb.addShop(...args);
 };
 
-export const addCustomer = async (...args: Parameters<typeof postgresDb.addCustomer>) => {
-  return usePostgres ? postgresDb.addCustomer(...args) : sqliteDb.addCustomer(...args);
+export const findShopByEmail = async (...args: Parameters<typeof sqliteDb.findShopByEmail>) => {
+  return sqliteDb.findShopByEmail(...args);
 };
 
-export const updateCustomer = async (
-  ...args: Parameters<typeof postgresDb.updateCustomer>
-) => {
-  return usePostgres
-    ? postgresDb.updateCustomer(...args)
-    : sqliteDb.updateCustomer(...args);
+export const listCustomers = async (...args: Parameters<typeof sqliteDb.listCustomers>) => {
+  return sqliteDb.listCustomers(...args);
 };
 
-export const addLedgerEntry = async (
-  ...args: Parameters<typeof postgresDb.addLedgerEntry>
-) => {
-  return usePostgres
-    ? postgresDb.addLedgerEntry(...args)
-    : sqliteDb.addLedgerEntry(...args);
+export const addCustomer = async (...args: Parameters<typeof sqliteDb.addCustomer>) => {
+  return sqliteDb.addCustomer(...args);
 };
 
-export const getLedgerEntries = async (
-  ...args: Parameters<typeof postgresDb.getLedgerEntries>
-) => {
-  return usePostgres
-    ? postgresDb.getLedgerEntries(...args)
-    : sqliteDb.getLedgerEntries(...args);
+export const updateCustomer = async (...args: Parameters<typeof sqliteDb.updateCustomer>) => {
+  return sqliteDb.updateCustomer(...args);
 };
 
-export const listCategories = async () => {
-  return usePostgres ? postgresDb.listCategories() : sqliteDb.listCategories();
+export const addLedgerEntry = async (...args: Parameters<typeof sqliteDb.addLedgerEntry>) => {
+  return sqliteDb.addLedgerEntry(...args);
 };
 
-export const addCategory = async (...args: Parameters<typeof postgresDb.addCategory>) => {
-  return usePostgres ? postgresDb.addCategory(...args) : sqliteDb.addCategory(...args);
+export const getLedgerEntries = async (...args: Parameters<typeof sqliteDb.getLedgerEntries>) => {
+  return sqliteDb.getLedgerEntries(...args);
 };
 
-export const listBrands = async (...args: Parameters<typeof postgresDb.listBrands>) => {
-  return usePostgres ? postgresDb.listBrands(...args) : sqliteDb.listBrands(...args);
+export const listCategories = async (...args: Parameters<typeof sqliteDb.listCategories>) => {
+  return sqliteDb.listCategories(...args);
 };
 
-export const addBrand = async (...args: Parameters<typeof postgresDb.addBrand>) => {
-  return usePostgres ? postgresDb.addBrand(...args) : sqliteDb.addBrand(...args);
+export const addCategory = async (...args: Parameters<typeof sqliteDb.addCategory>) => {
+  return sqliteDb.addCategory(...args);
 };
 
-export const getAllItems = async (...args: Parameters<typeof postgresDb.getAllItems>) => {
-  return usePostgres ? postgresDb.getAllItems(...args) : sqliteDb.getAllItems(...args);
+export const listBrands = async (...args: Parameters<typeof sqliteDb.listBrands>) => {
+  return sqliteDb.listBrands(...args);
 };
 
-export const addItem = async (...args: Parameters<typeof postgresDb.addItem>) => {
-  return usePostgres ? postgresDb.addItem(...args) : sqliteDb.addItem(...args);
+export const addBrand = async (...args: Parameters<typeof sqliteDb.addBrand>) => {
+  return sqliteDb.addBrand(...args);
 };
 
-export const deleteItem = async (...args: Parameters<typeof postgresDb.deleteItem>) => {
-  return usePostgres ? postgresDb.deleteItem(...args) : sqliteDb.deleteItem(...args);
+export const getAllItems = async (...args: Parameters<typeof sqliteDb.getAllItems>) => {
+  return sqliteDb.getAllItems(...args);
 };
 
-export const deleteLedgerEntry = async (...args: Parameters<typeof postgresDb.deleteLedgerEntry>) => {
-  return usePostgres ? postgresDb.deleteLedgerEntry(...args) : sqliteDb.deleteLedgerEntry(...args);
+export const addItem = async (...args: Parameters<typeof sqliteDb.addItem>) => {
+  return sqliteDb.addItem(...args);
 };
 
-export const listAuditLogs = async (...args: Parameters<typeof postgresDb.listAuditLogs>) => {
-  return usePostgres ? postgresDb.listAuditLogs(...args) : sqliteDb.listAuditLogs(...args);
+export const deleteLedgerEntry = async (...args: Parameters<typeof sqliteDb.deleteLedgerEntry>) => {
+  return sqliteDb.deleteLedgerEntry(...args);
 };
 
-export const getCustomerSummary = async (
-  ...args: Parameters<typeof postgresDb.getCustomerSummary>
-) => {
-  return usePostgres
-    ? postgresDb.getCustomerSummary(...args)
-    : sqliteDb.getCustomerSummary(...args);
+export const listAuditLogs = async (...args: Parameters<typeof sqliteDb.listAuditLogs>) => {
+  return sqliteDb.listAuditLogs(...args);
 };
 
-export const getLedgerAging = async (...args: Parameters<typeof postgresDb.getLedgerAging>) => {
-  return usePostgres ? postgresDb.getLedgerAging(...args) : sqliteDb.getLedgerAging(...args);
+export const getCustomerSummary = async (...args: Parameters<typeof sqliteDb.getCustomerSummary>) => {
+  return sqliteDb.getCustomerSummary(...args);
+};
+
+export const getLedgerAging = async (...args: Parameters<typeof sqliteDb.getLedgerAging>) => {
+  return sqliteDb.getLedgerAging(...args);
 };
