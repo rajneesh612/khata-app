@@ -243,17 +243,22 @@ app.get("/api/export/ledger/:customerId.csv", async (req: AuthRequest, res) => {
 });
 
 // Static files for client
-if (process.env.NODE_ENV === "production") {
-  const clientDist = path.join(__dirname, "..", "client", "dist");
-  app.use(express.static(clientDist));
-  app.get("*", (_req, res) => {
-    res.sendFile(path.join(clientDist, "index.html"));
-  });
-} else {
+const clientDist = path.join(__dirname, "..", "client", "dist");
+app.use(express.static(clientDist));
+
+if (process.env.NODE_ENV !== "production") {
   app.get("/", (_req, res) => {
     res.redirect("http://localhost:5173");
   });
 }
+
+// Fallback for SPA (Should be last)
+app.get("*", (req, res, next) => {
+  if (req.path.startsWith("/api")) {
+    return next();
+  }
+  res.sendFile(path.join(clientDist, "index.html"));
+});
 
 initDb().then(() => {
   app.listen(port, () => {
