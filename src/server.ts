@@ -123,14 +123,12 @@ app.get("/api/auth/me", authenticateToken, (req: AuthRequest, res) => {
   res.json(req.user);
 });
 
-// Protected Business Routes
-app.use("/api", authenticateToken);
-
-app.get("/api/customers", async (req: AuthRequest, res) => {
+// Business Routes
+app.get("/api/customers", authenticateToken, async (req: AuthRequest, res) => {
   res.json(await listCustomers(req.user!.shopId));
 });
 
-app.post("/api/customers", async (req: AuthRequest, res) => {
+app.post("/api/customers", authenticateToken, async (req: AuthRequest, res) => {
   try {
     const customer = await addCustomer({
       shop_id: req.user!.shopId,
@@ -144,7 +142,7 @@ app.post("/api/customers", async (req: AuthRequest, res) => {
   }
 });
 
-app.put("/api/customers/:id", async (req: AuthRequest, res) => {
+app.put("/api/customers/:id", authenticateToken, async (req: AuthRequest, res) => {
   const customerId = Number(req.params.id);
   try {
     const customer = await updateCustomer({
@@ -160,12 +158,12 @@ app.put("/api/customers/:id", async (req: AuthRequest, res) => {
   }
 });
 
-app.get("/api/customers/:id/entries", async (req: AuthRequest, res) => {
+app.get("/api/customers/:id/entries", authenticateToken, async (req: AuthRequest, res) => {
   const customerId = Number(req.params.id);
   res.json(await getLedgerEntries(req.user!.shopId, customerId));
 });
 
-app.post("/api/customers/:id/entries", async (req: AuthRequest, res) => {
+app.post("/api/customers/:id/entries", authenticateToken, async (req: AuthRequest, res) => {
   const customerId = Number(req.params.id);
   try {
     const entry = await addLedgerEntry({
@@ -186,7 +184,7 @@ app.post("/api/customers/:id/entries", async (req: AuthRequest, res) => {
   }
 });
 
-app.delete("/api/customers/:customerId/entries/:entryId", async (req: AuthRequest, res) => {
+app.delete("/api/customers/:customerId/entries/:entryId", authenticateToken, async (req: AuthRequest, res) => {
   try {
     await deleteLedgerEntry(req.user!.shopId, Number(req.params.entryId));
     res.status(204).end();
@@ -195,21 +193,21 @@ app.delete("/api/customers/:customerId/entries/:entryId", async (req: AuthReques
   }
 });
 
-app.get("/api/customers/:id/summary", async (req: AuthRequest, res) => {
+app.get("/api/customers/:id/summary", authenticateToken, async (req: AuthRequest, res) => {
   res.json(await getCustomerSummary(req.user!.shopId, Number(req.params.id)));
 });
 
-app.get("/api/customers/:id/aging", async (req: AuthRequest, res) => {
+app.get("/api/customers/:id/aging", authenticateToken, async (req: AuthRequest, res) => {
   res.json(await getLedgerAging(req.user!.shopId, Number(req.params.id)));
 });
 
-app.get("/api/audit-logs", async (req: AuthRequest, res) => {
+app.get("/api/audit-logs", authenticateToken, async (req: AuthRequest, res) => {
   const limit = req.query.limit ? Number(req.query.limit) : 50;
   res.json(await listAuditLogs(req.user!.shopId, limit));
 });
 
 // CSV Export (Protected)
-app.get("/api/export/customers.csv", async (req: AuthRequest, res) => {
+app.get("/api/export/customers.csv", authenticateToken, async (req: AuthRequest, res) => {
   const customers = await listCustomers(req.user!.shopId);
   const data = await Promise.all(
     customers.map(async (c: any) => {
@@ -228,7 +226,7 @@ app.get("/api/export/customers.csv", async (req: AuthRequest, res) => {
   res.send(csv);
 });
 
-app.get("/api/export/ledger/:customerId.csv", async (req: AuthRequest, res) => {
+app.get("/api/export/ledger/:customerId.csv", authenticateToken, async (req: AuthRequest, res) => {
   const customerId = Number(req.params.customerId);
   const entries = await getLedgerEntries(req.user!.shopId, customerId);
   
