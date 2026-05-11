@@ -242,7 +242,7 @@ app.get("/api/export/ledger/:customerId.csv", authenticateToken, async (req: Aut
 
 // Static files for client
 const clientDist = path.join(__dirname, "..", "client", "dist");
-app.use(express.static(clientDist));
+// NO app.use(express.static(clientDist)) here anymore!
 
 if (process.env.NODE_ENV !== "production") {
   app.get("/", (_req, res) => {
@@ -255,8 +255,18 @@ app.get("*", (req, res, next) => {
   if (req.path.startsWith("/api/")) {
     return next();
   }
+  
+  // Only serve index.html if it's NOT an API call
+  // This ensures that POST /api/auth/signup definitely hits the API route below
+  // or returns a 404 from Express if not found, rather than returning index.html (which causes the "Cannot POST" error)
   res.sendFile(path.join(clientDist, "index.html"));
 });
+
+// IMPORTANT: Put static file serving AFTER the API routes but BEFORE the wildcard
+// Actually, let's put it right before the wildcard but AFTER API routes are defined.
+// Wait, the API routes are ALREADY defined above this section.
+
+app.use(express.static(clientDist));
 
 initDb().then(() => {
   app.listen(port, () => {
