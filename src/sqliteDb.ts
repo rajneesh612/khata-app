@@ -402,6 +402,27 @@ export const addItem = (payload: AddItemPayload): Item => {
   return database.prepare("SELECT * FROM items WHERE id = ?").get(info.lastInsertRowid) as Item;
 };
 
+export const deleteItem = (shopId: number, itemId: number): void => {
+  const database = getDb();
+  const item = database
+    .prepare("SELECT * FROM items WHERE id = ? AND shop_id = ?")
+    .get(itemId, shopId) as Item | undefined;
+
+  if (!item) {
+    throw new Error("Item not found or access denied");
+  }
+
+  database.prepare("DELETE FROM items WHERE id = ? AND shop_id = ?").run(itemId, shopId);
+
+  writeAuditLog({
+    shopId,
+    action: "delete",
+    entityType: "item",
+    entityId: itemId,
+    summary: `Item deleted: ${item.name}`
+  });
+};
+
 export const deleteLedgerEntry = (shopId: number, entryId: number): void => {
   const database = getDb();
   const entry = database
