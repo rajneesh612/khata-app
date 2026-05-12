@@ -141,6 +141,13 @@ const getDb = (): Database.Database => {
   ensureColumn("items", "stock_quantity", "REAL NOT NULL DEFAULT 0");
   ensureColumn("customers", "address", "TEXT");
   ensureColumn("items", "low_stock_threshold", "REAL NOT NULL DEFAULT 5");
+  
+  // Ensure default shop exists for demo purposes
+  const shopCount = (db.prepare("SELECT COUNT(*) as count FROM shops").get() as { count: number }).count;
+  if (shopCount === 0) {
+    db.prepare("INSERT INTO shops (id, shop_name, owner_name, email, password_hash) VALUES (?, ?, ?, ?, ?)")
+      .run(1, "Demo Shop", "Admin", "admin@demo.com", "placeholder_hash");
+  }
 
   return db;
 };
