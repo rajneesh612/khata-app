@@ -14,6 +14,7 @@ import type {
   ItemFilters,
   LedgerAging,
   LedgerEntry,
+  Shop,
   UpdateCustomerPayload
 } from "./dbTypes";
 
@@ -590,10 +591,11 @@ export const getLedgerEntries = async (shopId: number, customerId: number): Prom
   );
 };
 
-export const listCategories = async (): Promise<Category[]> => {
+export const listCategories = async (shopId: number): Promise<Category[]> => {
   await initDb();
   const result = await getPool().query(
-    "SELECT id, name, created_at FROM categories ORDER BY name"
+    "SELECT id, name, created_at FROM categories WHERE shop_id = $1 ORDER BY name",
+    [shopId]
   );
   return result.rows.map((row) => mapCategory(row as Category & { created_at: Date | string }));
 };
@@ -606,11 +608,12 @@ export const addCategory = async (payload: AddCategoryPayload): Promise<Category
   }
 
   const result = await getPool().query(
-    "INSERT INTO categories (name) VALUES ($1) RETURNING id, name, created_at",
-    [name]
+    "INSERT INTO categories (shop_id, name) VALUES ($1, $2) RETURNING id, name, created_at",
+    [payload.shop_id, name]
   );
   const category = mapCategory(result.rows[0] as Category & { created_at: Date | string });
   await writeAuditLog({
+    shopId: payload.shop_id,
     action: "create",
     entityType: "category",
     entityId: category.id,
@@ -619,15 +622,16 @@ export const addCategory = async (payload: AddCategoryPayload): Promise<Category
   return category;
 };
 
-export const listBrands = async (categoryId?: number | null): Promise<Brand[]> => {
+export const listBrands = async (shopId: number, categoryId?: number | null): Promise<Brand[]> => {
   await initDb();
   const result = categoryId
     ? await getPool().query(
-        "SELECT id, name, category_id, created_at FROM brands WHERE category_id = $1 ORDER BY name",
-        [categoryId]
+        "SELECT id, name, category_id, created_at FROM brands WHERE shop_id = $1 AND category_id = $2 ORDER BY name",
+        [shopId, categoryId]
       )
     : await getPool().query(
-        "SELECT id, name, category_id, created_at FROM brands ORDER BY name"
+        "SELECT id, name, category_id, created_at FROM brands WHERE shop_id = $1 ORDER BY name",
+        [shopId]
       );
 
   return result.rows.map((row) => mapBrand(row as Brand & { created_at: Date | string }));
@@ -649,6 +653,7 @@ export const addBrand = async (payload: AddBrandPayload): Promise<Brand> => {
   );
   const brand = mapBrand(result.rows[0] as Brand & { created_at: Date | string });
   await writeAuditLog({
+    shopId: payload.shop_id,
     action: "create",
     entityType: "brand",
     entityId: brand.id,
@@ -657,17 +662,17 @@ export const addBrand = async (payload: AddBrandPayload): Promise<Brand> => {
   return brand;
 };
 
-export const getAllItems = async (filters?: ItemFilters): Promise<Item[]> => {
+export const getAllItems = async (filters: ItemFilters): Promise<Item[]> => {
   await initDb();
   let query =
-    "SELECT id, name, category_id, brand_id, default_rate, unit, stock_quantity, low_stock_threshold, created_at FROM items";
-  const params: Array<number> = [];
+    "SELECT id, name, category_id, brand_id, default_rate, unit, stock_quantity, low_stock_threshold, created_at FROM items WHERE shop_id = $1";
+  const params: Array<number> = [filters.shop_id];
 
   if (filters?.brandId) {
-    query += " WHERE brand_id = $1";
+    query += " AND brand_id = $2";
     params.push(filters.brandId);
   } else if (filters?.categoryId) {
-    query += " WHERE category_id = $1";
+    query += " AND category_id = $2";
     params.push(filters.categoryId);
   }
 
@@ -713,6 +718,7 @@ export const addItem = async (payload: AddItemPayload): Promise<Item> => {
 
     const item = mapItem(result.rows[0] as Item & { created_at: Date | string });
     await writeAuditLog({
+      shopId: payload.shop_id,
       action: "update",
       entityType: "item",
       entityId: item.id,
@@ -740,6 +746,7 @@ export const addItem = async (payload: AddItemPayload): Promise<Item> => {
 
   const item = mapItem(result.rows[0] as Item & { created_at: Date | string });
   await writeAuditLog({
+    shopId: payload.shop_id,
     action: "create",
     entityType: "item",
     entityId: item.id,
@@ -748,16 +755,17 @@ export const addItem = async (payload: AddItemPayload): Promise<Item> => {
   return item;
 };
 
-export const deleteItem = async (itemId: number): Promise<void> => {
+export const deleteItem = async (shopId: number, itemId: number): Promise<void> => {
   await initDb();
   const existing = await getPool().query<{ id: number; name: string }>(
-    "SELECT id, name FROM items WHERE id = $1",
-    [itemId]
+    "SELECT id, name FROM items WHERE id = $1 AND shop_id = $2",
+    [itemId, shopId]
   );
-  await getPool().query("DELETE FROM items WHERE id = $1", [itemId]);
+  await getPool().query("DELETE FROM items WHERE id = $1 AND shop_id = $2", [itemId, shopId]);
   const item = existing.rows[0];
   if (item) {
     await writeAuditLog({
+      shopId,
       action: "delete",
       entityType: "item",
       entityId: item.id,
@@ -766,16 +774,17 @@ export const deleteItem = async (itemId: number): Promise<void> => {
   }
 };
 
-export const deleteLedgerEntry = async (entryId: number): Promise<void> => {
+export const deleteLedgerEntry = async (shopId: number, entryId: number): Promise<void> => {
   await initDb();
   const existing = await getPool().query<{ id: number; item_name: string }>(
-    "SELECT id, item_name FROM ledger_entries WHERE id = $1",
-    [entryId]
+    "SELECT id, item_name FROM ledger_entries WHERE id = $1 AND shop_id = $2",
+    [entryId, shopId]
   );
-  await getPool().query("DELETE FROM ledger_entries WHERE id = $1", [entryId]);
+  await getPool().query("DELETE FROM ledger_entries WHERE id = $1 AND shop_id = $2", [entryId, shopId]);
   const entry = existing.rows[0];
   if (entry) {
     await writeAuditLog({
+      shopId,
       action: "delete",
       entityType: "ledger_entry",
       entityId: entry.id,

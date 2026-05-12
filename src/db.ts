@@ -81,6 +81,10 @@ export const addItem = async (...args: Parameters<typeof db.addItem>) => {
   return (db.addItem as any)(...args);
 };
 
+export const deleteItem = async (...args: Parameters<typeof db.deleteItem>) => {
+  return (db.deleteItem as any)(...args);
+};
+
 export const deleteLedgerEntry = async (...args: Parameters<typeof db.deleteLedgerEntry>) => {
   return (db.deleteLedgerEntry as any)(...args);
 };
