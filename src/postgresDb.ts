@@ -257,7 +257,7 @@ const seedCatalog = async (): Promise<void> => {
 
   for (const name of seedCategories) {
     await database.query(
-      "INSERT INTO categories (name) VALUES ($1) ON CONFLICT (name) DO NOTHING",
+      "INSERT INTO categories (shop_id, name) VALUES (1, $1) ON CONFLICT (shop_id, name) DO NOTHING",
       [name]
     );
   }
@@ -273,7 +273,7 @@ const seedCatalog = async (): Promise<void> => {
       continue;
     }
     await database.query(
-      "INSERT INTO brands (name, category_id) VALUES ($1, $2) ON CONFLICT (name, category_id) DO NOTHING",
+      "INSERT INTO brands (shop_id, name, category_id) VALUES (1, $1, $2) ON CONFLICT (shop_id, name, category_id) DO NOTHING",
       [brand.name, categoryId]
     );
   }
@@ -290,7 +290,7 @@ const seedCatalog = async (): Promise<void> => {
       continue;
     }
     await database.query(
-      "INSERT INTO items (name, category_id, brand_id, default_rate, unit, stock_quantity, low_stock_threshold) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (name, brand_id) DO NOTHING",
+      "INSERT INTO items (shop_id, name, category_id, brand_id, default_rate, unit, stock_quantity, low_stock_threshold) VALUES (1, $1, $2, $3, $4, $5, $6, $7) ON CONFLICT (shop_id, name, brand_id) DO NOTHING",
       [item.name, categoryId, brandId, item.defaultRate, item.unit, 0, 5]
     );
   }
@@ -327,7 +327,8 @@ export const initDb = async (): Promise<void> => {
         id SERIAL PRIMARY KEY,
         shop_id INTEGER REFERENCES shops(id) ON DELETE CASCADE,
         name TEXT NOT NULL,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (shop_id, name)
       );
 
       CREATE TABLE IF NOT EXISTS brands (
@@ -336,7 +337,7 @@ export const initDb = async (): Promise<void> => {
         name TEXT NOT NULL,
         category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE RESTRICT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE (name, category_id)
+        UNIQUE (shop_id, name, category_id)
       );
 
       CREATE TABLE IF NOT EXISTS items (
@@ -350,7 +351,7 @@ export const initDb = async (): Promise<void> => {
         stock_quantity DOUBLE PRECISION NOT NULL DEFAULT 0,
         low_stock_threshold DOUBLE PRECISION NOT NULL DEFAULT 5,
         created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE (name, brand_id)
+        UNIQUE (shop_id, name, brand_id)
       );
 
       CREATE TABLE IF NOT EXISTS ledger_entries (
@@ -396,6 +397,20 @@ export const initDb = async (): Promise<void> => {
       ALTER TABLE items ADD COLUMN IF NOT EXISTS shop_id INTEGER REFERENCES shops(id) ON DELETE CASCADE;
       ALTER TABLE ledger_entries ADD COLUMN IF NOT EXISTS shop_id INTEGER REFERENCES shops(id) ON DELETE CASCADE;
       ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS shop_id INTEGER REFERENCES shops(id) ON DELETE CASCADE;
+
+      -- Add Unique Constraints for ON CONFLICT to work
+      DO $$ 
+      BEGIN 
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'categories_shop_id_name_key') THEN
+          ALTER TABLE categories ADD CONSTRAINT categories_shop_id_name_key UNIQUE (shop_id, name);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'brands_shop_id_name_category_id_key') THEN
+          ALTER TABLE brands ADD CONSTRAINT brands_shop_id_name_category_id_key UNIQUE (shop_id, name, category_id);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'items_shop_id_name_brand_id_key') THEN
+          ALTER TABLE items ADD CONSTRAINT items_shop_id_name_brand_id_key UNIQUE (shop_id, name, brand_id);
+        END IF;
+      END $$;
     `);
 
     // Ensure all existing records have shop_id = 1
