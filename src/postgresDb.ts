@@ -232,14 +232,15 @@ const mapAuditLog = (row: {
 });
 
 const writeAuditLog = async (payload: {
+  shopId: number;
   action: string;
   entityType: string;
   entityId?: number | null;
   summary: string;
 }): Promise<void> => {
   await getPool().query(
-    "INSERT INTO audit_logs (action, entity_type, entity_id, summary) VALUES ($1, $2, $3, $4)",
-    [payload.action, payload.entityType, payload.entityId ?? null, payload.summary]
+    "INSERT INTO audit_logs (shop_id, action, entity_type, entity_id, summary) VALUES ($1, $2, $3, $4, $5)",
+    [payload.shopId, payload.action, payload.entityType, payload.entityId ?? null, payload.summary]
   );
 };
 
@@ -303,21 +304,34 @@ export const initDb = async (): Promise<void> => {
     const database = getPool();
 
     await database.query(`
+      CREATE TABLE IF NOT EXISTS shops (
+        id SERIAL PRIMARY KEY,
+        shop_name TEXT NOT NULL,
+        owner_name TEXT NOT NULL,
+        email TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+
       CREATE TABLE IF NOT EXISTS customers (
         id SERIAL PRIMARY KEY,
+        shop_id INTEGER REFERENCES shops(id) ON DELETE CASCADE,
         name TEXT NOT NULL,
         phone TEXT,
+        address TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
 
       CREATE TABLE IF NOT EXISTS categories (
         id SERIAL PRIMARY KEY,
-        name TEXT NOT NULL UNIQUE,
+        shop_id INTEGER REFERENCES shops(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
 
       CREATE TABLE IF NOT EXISTS brands (
         id SERIAL PRIMARY KEY,
+        shop_id INTEGER REFERENCES shops(id) ON DELETE CASCADE,
         name TEXT NOT NULL,
         category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE RESTRICT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -326,6 +340,7 @@ export const initDb = async (): Promise<void> => {
 
       CREATE TABLE IF NOT EXISTS items (
         id SERIAL PRIMARY KEY,
+        shop_id INTEGER REFERENCES shops(id) ON DELETE CASCADE,
         name TEXT NOT NULL,
         category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE RESTRICT,
         brand_id INTEGER NOT NULL REFERENCES brands(id) ON DELETE RESTRICT,
@@ -339,6 +354,7 @@ export const initDb = async (): Promise<void> => {
 
       CREATE TABLE IF NOT EXISTS ledger_entries (
         id SERIAL PRIMARY KEY,
+        shop_id INTEGER REFERENCES shops(id) ON DELETE CASCADE,
         customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
         item_id INTEGER REFERENCES items(id) ON DELETE SET NULL,
         item_name TEXT NOT NULL,
@@ -354,6 +370,7 @@ export const initDb = async (): Promise<void> => {
 
       CREATE TABLE IF NOT EXISTS audit_logs (
         id SERIAL PRIMARY KEY,
+        shop_id INTEGER REFERENCES shops(id) ON DELETE CASCADE,
         action TEXT NOT NULL,
         entity_type TEXT NOT NULL,
         entity_id INTEGER,
@@ -362,18 +379,13 @@ export const initDb = async (): Promise<void> => {
       );
     `);
 
-    await database.query(`
-      ALTER TABLE items
-      ADD COLUMN IF NOT EXISTS stock_quantity DOUBLE PRECISION NOT NULL DEFAULT 0;
-
-      ALTER TABLE items
-      ADD COLUMN IF NOT EXISTS low_stock_threshold DOUBLE PRECISION NOT NULL DEFAULT 5;
-    `);
-
-        await database.query(`
-      ALTER TABLE customers
-      ADD COLUMN IF NOT EXISTS address TEXT;
-    `);
+    // Ensure default shop exists
+    const shopCount = await database.query("SELECT COUNT(*) FROM shops");
+    if (parseInt(shopCount.rows[0].count) === 0) {
+      await database.query(
+        "INSERT INTO shops (id, shop_name, owner_name, email, password_hash) VALUES (1, 'Demo Shop', 'Admin', 'admin@demo.com', 'placeholder_hash')"
+      );
+    }
 
     await seedCatalog();
   })();
@@ -381,10 +393,32 @@ export const initDb = async (): Promise<void> => {
   return initPromise;
 };
 
-export const listCustomers = async (): Promise<Customer[]> => {
+// Auth methods
+export const addShop = async (payload: {
+  shop_name: string;
+  owner_name: string;
+  email: string;
+  password_hash: string;
+}): Promise<Shop> => {
   await initDb();
   const result = await getPool().query(
-    "SELECT id, name, phone, address, created_at FROM customers ORDER BY name"
+    "INSERT INTO shops (shop_name, owner_name, email, password_hash) VALUES ($1, $2, $3, $4) RETURNING *",
+    [payload.shop_name, payload.owner_name, payload.email, payload.password_hash]
+  );
+  return result.rows[0] as Shop;
+};
+
+export const findShopByEmail = async (email: string): Promise<Shop | undefined> => {
+  await initDb();
+  const result = await getPool().query("SELECT * FROM shops WHERE email = $1", [email]);
+  return result.rows[0] as Shop | undefined;
+};
+
+export const listCustomers = async (shopId: number): Promise<Customer[]> => {
+  await initDb();
+  const result = await getPool().query(
+    "SELECT id, name, phone, address, created_at FROM customers WHERE shop_id = $1 ORDER BY name",
+    [shopId]
   );
   return result.rows.map((row) => mapCustomer(row as Customer & { created_at: Date | string }));
 };
@@ -397,12 +431,13 @@ export const addCustomer = async (payload: AddCustomerPayload): Promise<Customer
   }
 
   const result = await getPool().query(
-    "INSERT INTO customers (name, phone, address) VALUES ($1, $2, $3) RETURNING id, name, phone, address, created_at",
-[name, payload.phone?.trim() || null, payload.address?.trim() || null]
+    "INSERT INTO customers (shop_id, name, phone, address) VALUES ($1, $2, $3, $4) RETURNING id, name, phone, address, created_at",
+    [payload.shop_id, name, payload.phone?.trim() || null, payload.address?.trim() || null]
   );
 
   const customer = mapCustomer(result.rows[0] as Customer & { created_at: Date | string });
   await writeAuditLog({
+    shopId: payload.shop_id,
     action: "create",
     entityType: "customer",
     entityId: customer.id,
@@ -421,8 +456,8 @@ export const updateCustomer = async (
   }
 
   const result = await getPool().query(
-    "UPDATE customers SET name = $1, phone = $2, address = $3 WHERE id = $4 RETURNING id, name, phone, address, created_at",
-    [name, payload.phone?.trim() || null, payload.address?.trim() || null, payload.id]
+    "UPDATE customers SET name = $1, phone = $2, address = $3 WHERE id = $4 AND shop_id = $5 RETURNING id, name, phone, address, created_at",
+    [name, payload.phone?.trim() || null, payload.address?.trim() || null, payload.id, payload.shop_id]
   );
 
   if (!result.rows[0]) {
@@ -431,6 +466,7 @@ export const updateCustomer = async (
 
   const customer = mapCustomer(result.rows[0] as Customer & { created_at: Date | string });
   await writeAuditLog({
+    shopId: payload.shop_id,
     action: "update",
     entityType: "customer",
     entityId: customer.id,
@@ -492,6 +528,7 @@ export const addLedgerEntry = async (
     const result = await client.query(
       `
         INSERT INTO ledger_entries (
+          shop_id,
           customer_id,
           item_id,
           item_name,
@@ -503,10 +540,11 @@ export const addLedgerEntry = async (
           affects_balance,
           note
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         RETURNING *
       `,
       [
+        payload.shop_id,
         payload.customerId,
         payload.itemId ?? null,
         itemName,
@@ -526,6 +564,7 @@ export const addLedgerEntry = async (
       result.rows[0] as LedgerEntry & { created_at: Date | string }
     );
   await writeAuditLog({
+    shopId: payload.shop_id,
     action: "create",
     entityType: "ledger_entry",
     entityId: entry.id,
@@ -540,11 +579,11 @@ export const addLedgerEntry = async (
   }
 };
 
-export const getLedgerEntries = async (customerId: number): Promise<LedgerEntry[]> => {
+export const getLedgerEntries = async (shopId: number, customerId: number): Promise<LedgerEntry[]> => {
   await initDb();
   const result = await getPool().query(
-    "SELECT * FROM ledger_entries WHERE customer_id = $1 ORDER BY created_at DESC",
-    [customerId]
+    "SELECT * FROM ledger_entries WHERE customer_id = $1 AND shop_id = $2 ORDER BY created_at DESC",
+    [customerId, shopId]
   );
   return result.rows.map((row) =>
     mapLedgerEntry(row as LedgerEntry & { created_at: Date | string })
@@ -745,16 +784,17 @@ export const deleteLedgerEntry = async (entryId: number): Promise<void> => {
   }
 };
 
-export const listAuditLogs = async (limit = 50): Promise<AuditLog[]> => {
+export const listAuditLogs = async (shopId: number, limit = 50): Promise<AuditLog[]> => {
   await initDb();
   const result = await getPool().query(
-    "SELECT id, action, entity_type, entity_id, summary, created_at FROM audit_logs ORDER BY created_at DESC LIMIT $1",
-    [limit]
+    "SELECT id, action, entity_type, entity_id, summary, created_at FROM audit_logs WHERE shop_id = $1 ORDER BY created_at DESC LIMIT $2",
+    [shopId, limit]
   );
   return result.rows.map((row) => mapAuditLog(row as AuditLog & { created_at: Date | string }));
 };
 
 export const getCustomerSummary = async (
+  shopId: number,
   customerId: number
 ): Promise<CustomerSummary> => {
   await initDb();
@@ -767,9 +807,9 @@ export const getCustomerSummary = async (
         SUM(CASE WHEN entry_type = 'debit' AND COALESCE(affects_balance, 1) = 1 THEN amount ELSE 0 END) AS totalDebit,
         SUM(CASE WHEN entry_type = 'credit' AND COALESCE(affects_balance, 1) = 1 THEN amount ELSE 0 END) AS totalCredit
       FROM ledger_entries
-      WHERE customer_id = $1
+      WHERE customer_id = $1 AND shop_id = $2
     `,
-    [customerId]
+    [customerId, shopId]
   );
 
   const row = result.rows[0];
@@ -782,7 +822,7 @@ export const getCustomerSummary = async (
   };
 };
 
-export const getLedgerAging = async (customerId: number): Promise<LedgerAging> => {
+export const getLedgerAging = async (shopId: number, customerId: number): Promise<LedgerAging> => {
   await initDb();
   const result = await getPool().query<{
     amount: number;
@@ -792,9 +832,9 @@ export const getLedgerAging = async (customerId: number): Promise<LedgerAging> =
     `
       SELECT amount, entry_type, created_at
       FROM ledger_entries
-      WHERE customer_id = $1 AND COALESCE(affects_balance, 1) = 1
+      WHERE customer_id = $1 AND shop_id = $2 AND COALESCE(affects_balance, 1) = 1
     `,
-    [customerId]
+    [customerId, shopId]
   );
 
   const now = Date.now();
