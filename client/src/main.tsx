@@ -5,7 +5,6 @@ import './index.css'
 import App from './App.tsx'
 // import Login from './pages/Login.tsx'
 import Signup from './pages/Signup.tsx'
-import ProtectedRoute from './components/ProtectedRoute.tsx'
 import Header from './components/layout/Header.tsx'
 
 createRoot(document.getElementById('root')!).render(
@@ -13,11 +12,8 @@ createRoot(document.getElementById('root')!).render(
     <BrowserRouter>
       <Header />
       <Routes>
-        {/* <Route path="/login" element={<Login />} /> */}
         <Route path="/signup" element={<Signup />} />
-        <Route element={<ProtectedRoute />}>
-          <Route path="/" element={<App />} />
-        </Route>
+        <Route path="/" element={<App />} />
       </Routes>
     </BrowserRouter>
   </StrictMode>,

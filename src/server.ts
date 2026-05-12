@@ -1,9 +1,10 @@
+// List Customers (GET /api/customers)
+
+import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
-import express from "express";
 import path from "path";
 import cookieParser from "cookie-parser";
 import bcrypt from "bcryptjs";
-import { authenticateToken, generateToken, AuthRequest } from "./auth";
 import {
   addCustomer,
   addCategory,
@@ -28,6 +29,7 @@ import {
 const toCsvValue = (value: string | number | null): string => {
   const text = value === null || value === undefined ? "" : String(value);
   if (text.includes("\"") || text.includes(",") || text.includes("\n")) {
+  // Add Customer (POST /api/customers)
     return `"\${text.replace(/"/g, '""')}"`;
   }
   return text;
@@ -61,7 +63,32 @@ app.use(
   })
 );
 
+
+  // Add Customer (POST /api/customers)
+  app.post("/api/customers", async (req: Request, res: Response) => {
+    try {
+      const { name, phone, address } = req.body;
+      if (!name) {
+        return res.status(400).json({ error: "Customer name is required" });
+      }
+      const customer = await addCustomer({
+        shop_id: 1, // Default to shopId 1 for demo
+        name: String(name),
+        phone: phone ? String(phone) : undefined,
+        address: address ? String(address) : undefined
+      });
+      res.status(201).json(customer);
+    } catch (error) {
+      res.status(400).json({ error: (error as Error).message });
+    }
+  });
 // Auth Routes
+      // List Customers (GET /api/customers) -- moved after app initialization
+      app.get("/api/customers", async (req: Request, res: Response) => {
+        // TEMP: No auth required
+        const customers = await listCustomers(1); // Default to shopId 1 for demo
+        res.json(customers);
+      });
 app.post("/api/auth/signup", async (req, res) => {
   try {
     const { shop_name, owner_name, email, password } = req.body;
@@ -83,36 +110,6 @@ app.post("/api/auth/signup", async (req, res) => {
   }
 });
 
-app.post("/api/auth/login", async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    const shop = await findShopByEmail(email);
-    
-    if (!shop || !(await bcrypt.compare(password, shop.password_hash))) {
-      return res.status(401).json({ error: "Invalid email or password" });
-    }
-
-    const token = generateToken({ 
-      shopId: shop.id, 
-      email: shop.email, 
-      shopName: shop.shop_name 
-    });
-
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-    });
-
-    res.json({ 
-      shopId: shop.id, 
-      shopName: shop.shop_name,
-      ownerName: shop.owner_name
-    });
-  } catch (error) {
-    res.status(400).json({ error: (error as Error).message });
-  }
-});
 
 app.put("/api/customers/:id", async (req, res) => {
   // TEMP: No auth required
@@ -226,17 +223,16 @@ const clientDist = path.join(__dirname, "..", "client", "dist");
 // NO app.use(express.static(clientDist)) here anymore!
 
 if (process.env.NODE_ENV !== "production") {
-  app.get("/", (_req, res) => {
+  app.get("/", (_req: Request, res: Response) => {
     res.redirect("http://localhost:5173");
   });
 }
 
 // Fallback for SPA (Should be last)
-app.get("*", (req, res, next) => {
+app.get("*", (req: Request, res: Response, next: NextFunction) => {
   if (req.path.startsWith("/api/")) {
     return next();
   }
-  
   // Only serve index.html if it's NOT an API call
   // This ensures that POST /api/auth/signup definitely hits the API route below
   // or returns a 404 from Express if not found, rather than returning index.html (which causes the "Cannot POST" error)
@@ -254,3 +250,4 @@ initDb().then(() => {
     console.log(`Server running at http://localhost:${port}`);
   });
 });
+

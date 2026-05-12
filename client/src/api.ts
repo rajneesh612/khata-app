@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'https://khata-app-api.onrender.com/api',
+  baseURL: '/api',
   withCredentials: true,
 });
 
