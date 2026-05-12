@@ -98,15 +98,15 @@ const FieldLabel = ({ label }: { label: string }) => (
 )
 
 const WhatsAppIcon = ({ size = 16 }: { size?: number }) => (
-  <svg 
-    xmlns="http://www.w3.org/2000/svg" 
-    width={size} 
-    height={size} 
-    fill="currentColor" 
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width={size}
+    height={size}
+    fill="currentColor"
     viewBox="0 0 16 16"
     style={{ display: 'inline-block', verticalAlign: 'middle' }}
   >
-    <path d="M13.601 2.326A7.854 7.854 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.933 7.933 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.898 7.898 0 0 0 13.6 2.326zM7.994 14.521a6.573 6.573 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.557 6.557 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592zm3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.729.729 0 0 0-.529.247c-.182.198-.691.677-.691 1.654 0 .977.71 1.916.81 2.049.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232z"/>
+    <path d="M13.601 2.326A7.854 7.854 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.933 7.933 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.898 7.898 0 0 0 13.6 2.326zM7.994 14.521a6.573 6.573 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.557 6.557 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592zm3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.729.729 0 0 0-.529.247c-.182.198-.691.677-.691 1.654 0 .977.71 1.916.81 2.049.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232z" />
   </svg>
 )
 
@@ -225,7 +225,7 @@ function App() {
       const resp = await api.get('/customers')
       const data = resp.data as Customer[]
       setCustomers(data)
-      
+
       const summaryPromises = data.map(async (customer) => {
         try {
           const sResp = await api.get(`/customers/${customer.id}/summary`)
@@ -241,15 +241,15 @@ function App() {
       })
       setCustomerSummaries(summaryMap)
     } catch (error) {
-       console.error('Failed to load customers', error)
+      console.error('Failed to load customers', error)
     }
   }
 
   const dashboardStats = useMemo(() => {
     const totalOutstanding = Object.values(customerSummaries).reduce((sum, s) => sum + s.balance, 0)
     const topDebtors = customers
-      .map(c => ({ 
-        name: c.name, 
+      .map(c => ({
+        name: c.name,
         balance: customerSummaries[c.id]?.balance || 0,
         id: c.id
       }))
@@ -577,7 +577,7 @@ function App() {
           </div>
 
           <div className="inventory-overview-grid">
-            <div 
+            <div
               className="inventory-stat-card danger clickable-card"
               onClick={() => setIsOutstandingModalOpen(true)}
               style={{ cursor: 'pointer' }}
@@ -587,8 +587,8 @@ function App() {
               <p>Sabhi customers ka milakar kul udhaar. (View All)</p>
             </div>
             {dashboardStats.topDebtors.map((debtor, index) => (
-              <div 
-                key={debtor.id} 
+              <div
+                key={debtor.id}
                 className="inventory-stat-card warning clickable-card"
                 onClick={() => {
                   const customer = customers.find(c => c.id === debtor.id);
@@ -641,11 +641,8 @@ function App() {
             </div>
           ) : (
             <div className="empty-state-card inventory-empty-state">
-              <h3>Customer summary optional hai</h3>
-              <p>
-                Left side se customer select karoge to uska balance aur WhatsApp reminder
-                yahin dikh jayega.
-              </p>
+              <h3></h3>
+
             </div>
           )}
         </section>
@@ -728,10 +725,10 @@ function App() {
                     onChange={setEditCustomerPhone}
                     placeholder="Phone"
                   />
-                 <TextField
+                  <TextField
                     label="Address (optional)"
-                    value={editCustomerAddress}       
-                    onChange={setEditCustomerAddress}     
+                    value={editCustomerAddress}
+                    onChange={setEditCustomerAddress}
                     placeholder="Address"
                   />
                 </div>
@@ -864,7 +861,7 @@ function App() {
                       <th>Rate</th>
                       <th>Amount</th>
                       <th>Note</th>
-                      <th>Delete</th> 
+                      <th>Delete</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -897,16 +894,16 @@ function App() {
                       </tr>
                     ))}
                   </tbody>
-               <tfoot>
-                  <tr>
-                    <td colSpan={3}>Total</td>
-                    <td>{totalRow.qty.toFixed(2)}</td>
-                    <td>-</td>
-                    <td>{totalRow.amount.toFixed(2)}</td>
-                    <td></td>
-                    <td></td>
-                  </tr>
-                </tfoot>
+                  <tfoot>
+                    <tr>
+                      <td colSpan={3}>Total</td>
+                      <td>{totalRow.qty.toFixed(2)}</td>
+                      <td>-</td>
+                      <td>{totalRow.amount.toFixed(2)}</td>
+                      <td></td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
             </div>
@@ -941,15 +938,15 @@ function App() {
                         <td>{c.name}</td>
                         <td>{c.phone || '-'}</td>
                         <td>{c.address || '-'}</td>
-                        <td style={{ 
-                          color: c.balance > 0 ? 'var(--danger-color)' : (c.balance < 0 ? 'var(--success-color)' : 'inherit'), 
-                          fontWeight: 'bold' 
+                        <td style={{
+                          color: c.balance > 0 ? 'var(--danger-color)' : (c.balance < 0 ? 'var(--success-color)' : 'inherit'),
+                          fontWeight: 'bold'
                         }}>
                           Rs. {Math.abs(c.balance).toFixed(2)} {c.balance > 0 ? '(Dr)' : (c.balance < 0 ? '(Cr)' : '')}
                         </td>
                         <td>
-                          <button 
-                            className="btn-primary" 
+                          <button
+                            className="btn-primary"
                             onClick={() => {
                               handleSelectCustomer(c);
                               setIsOutstandingModalOpen(false);
