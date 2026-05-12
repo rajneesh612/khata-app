@@ -409,6 +409,7 @@ function App() {
       setPaymentAmount('')
       setPaymentNote('')
       await loadLedger(selectedCustomerId)
+      await loadCustomers() // Refresh total outstanding
       await loadAuditLogs()
     } catch (error: any) {
       alert(error.response?.data?.error || error.message)
@@ -455,6 +456,7 @@ function App() {
       setEntryNote('')
       setIsCashSale(false)
       await loadLedger(selectedCustomerId)
+      await loadCustomers() // Refresh total outstanding
       await loadAuditLogs()
     } catch (error: any) {
       alert(error.response?.data?.error || error.message)
@@ -467,6 +469,7 @@ function App() {
     try {
       await api.delete(`/customers/${selectedCustomerId}/entries/${entryId}`)
       await loadLedger(selectedCustomerId!)
+      await loadCustomers() // Refresh total outstanding
       await loadAuditLogs()
     } catch (error: any) {
       alert(error.response?.data?.error || error.message)
