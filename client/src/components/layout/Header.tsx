@@ -3,7 +3,6 @@ import { useNavigate, useLocation } from 'react-router-dom';
 
 
 const Header: React.FC = () => {
-  const navigate = useNavigate();
   const location = useLocation();
   const shopName = localStorage.getItem('shopName') || 'Khata Manager';
   const ownerName = localStorage.getItem('ownerName');
