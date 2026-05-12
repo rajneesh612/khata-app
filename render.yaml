@@ -10,7 +10,9 @@ services:
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: khata-db
+          property: connectionString
       - key: CLIENT_URL
         value: https://khata-app-web.onrender.com
 
@@ -27,3 +29,7 @@ services:
       - type: rewrite
         source: /*
         destination: /index.html
+
+databases:
+  - name: khata-db
+    plan: free
