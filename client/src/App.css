@@ -367,10 +367,22 @@ button:hover {
   color: #ffffff;
   white-space: nowrap;
   font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
 .btn-whatsapp:hover {
   background: #16a34a;
+}
+
+.btn-icon {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .btn-order-vendor {
