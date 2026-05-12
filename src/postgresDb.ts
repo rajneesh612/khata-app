@@ -388,6 +388,26 @@ export const initDb = async (): Promise<void> => {
       );
     }
 
+    // Schema Patches: Ensure shop_id exists in all tables
+    await database.query(`
+      ALTER TABLE customers ADD COLUMN IF NOT EXISTS shop_id INTEGER REFERENCES shops(id) ON DELETE CASCADE;
+      ALTER TABLE categories ADD COLUMN IF NOT EXISTS shop_id INTEGER REFERENCES shops(id) ON DELETE CASCADE;
+      ALTER TABLE brands ADD COLUMN IF NOT EXISTS shop_id INTEGER REFERENCES shops(id) ON DELETE CASCADE;
+      ALTER TABLE items ADD COLUMN IF NOT EXISTS shop_id INTEGER REFERENCES shops(id) ON DELETE CASCADE;
+      ALTER TABLE ledger_entries ADD COLUMN IF NOT EXISTS shop_id INTEGER REFERENCES shops(id) ON DELETE CASCADE;
+      ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS shop_id INTEGER REFERENCES shops(id) ON DELETE CASCADE;
+    `);
+
+    // Ensure all existing records have shop_id = 1
+    await database.query(`
+      UPDATE customers SET shop_id = 1 WHERE shop_id IS NULL;
+      UPDATE categories SET shop_id = 1 WHERE shop_id IS NULL;
+      UPDATE brands SET shop_id = 1 WHERE shop_id IS NULL;
+      UPDATE items SET shop_id = 1 WHERE shop_id IS NULL;
+      UPDATE ledger_entries SET shop_id = 1 WHERE shop_id IS NULL;
+      UPDATE audit_logs SET shop_id = 1 WHERE shop_id IS NULL;
+    `);
+
     await seedCatalog();
   })();
 
