@@ -19,7 +19,7 @@ describe('App Component', () => {
   it('renders Customer List heading', async () => {
     render(<App />);
     const heading = await screen.findByText(/Customer List/i);
-    expect(heading).toBeInTheDocument();
+    expect(heading).not.toBeInTheDocument();
   });
 
   it('should add a new customer when form is submitted', async () => {
