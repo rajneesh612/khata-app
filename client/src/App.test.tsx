@@ -14,6 +14,8 @@ vi.mock('./api', () => ({
 describe('App Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Mock shop in localStorage to bypass login screen
+    localStorage.setItem('shop', JSON.stringify({ id: 1, name: 'Test Shop', owner: 'Test Owner' }));
   });
 
   it('renders Customer List heading', async () => {
