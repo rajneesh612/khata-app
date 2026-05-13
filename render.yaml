@@ -4,7 +4,7 @@ services:
     name: khata-app-api
     plan: free
     rootDir: .
-    buildCommand: npm install --include=dev && npm run build
+    buildCommand: npm install --include=dev && npm run test:server -- --run && npm run build
     startCommand: npm start
     envVars:
       - key: NODE_ENV
@@ -20,7 +20,7 @@ services:
     runtime: static
     name: khata-app-web
     rootDir: client
-    buildCommand: npm install --include=dev && npm run build
+    buildCommand: npm install --include=dev && npm run test -- --run && npm run build
     staticPublishPath: dist
     envVars:
       - key: VITE_API_BASE_URL
