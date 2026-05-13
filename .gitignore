@@ -4,3 +4,5 @@ data/
 client/node_modules/
 client/dist/
 .DS_Store
+coverage/
+client/coverage/
