@@ -12,7 +12,7 @@ describe('API Endpoints', () => {
   it('should return a list of customers', async () => {
     const response = await request(app).get('/api/customers');
 
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(200);
     expect(Array.isArray(response.body)).toBe(true);
   });
 

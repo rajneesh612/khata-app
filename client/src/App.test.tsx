@@ -1,4 +1,3 @@
-// Triggering CI/CD check with failing test
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import App from './App';
@@ -20,7 +19,7 @@ describe('App Component', () => {
   it('renders Customer List heading', async () => {
     render(<App />);
     const heading = await screen.findByText(/Customer List/i);
-    expect(heading).not.toBeInTheDocument();
+    expect(heading).toBeInTheDocument();
   });
 
   it('should add a new customer when form is submitted', async () => {
