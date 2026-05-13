@@ -5,6 +5,7 @@ import cors from "cors";
 import path from "path";
 import cookieParser from "cookie-parser";
 import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 import {
   addCustomer,
   addLedgerEntry,
@@ -23,8 +24,7 @@ import {
 const toCsvValue = (value: string | number | null): string => {
   const text = value === null || value === undefined ? "" : String(value);
   if (text.includes("\"") || text.includes(",") || text.includes("\n")) {
-  // Add Customer (POST /api/customers)
-    return `"\${text.replace(/"/g, '""')}"`;
+    return `"${text.replace(/"/g, '""')}"`;
   }
   return text;
 };
@@ -58,31 +58,25 @@ app.use(
 );
 
 
-  // Add Customer (POST /api/customers)
-  app.post("/api/customers", async (req: Request, res: Response) => {
-    try {
-      const { name, phone, address } = req.body;
-      if (!name) {
-        return res.status(400).json({ error: "Customer name is required" });
-      }
-      const customer = await addCustomer({
-        shop_id: 1, // Default to shopId 1 for demo
-        name: String(name),
-        phone: phone ? String(phone) : undefined,
-        address: address ? String(address) : undefined
-      });
-      res.status(201).json(customer);
-    } catch (error) {
-      res.status(400).json({ error: (error as Error).message });
-    }
-  });
 // Auth Routes
-      // List Customers (GET /api/customers) -- moved after app initialization
-      app.get("/api/customers", async (req: Request, res: Response) => {
-        // TEMP: No auth required
-        const customers = await listCustomers(1); // Default to shopId 1 for demo
-        res.json(customers);
-      });
+const JWT_SECRET = process.env.JWT_SECRET || "super-secret-khata-key";
+
+const authenticateToken = (req: Request, res: Response, next: NextFunction) => {
+  const token = req.cookies.token || req.headers['authorization']?.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: "Unauthorized: No token provided" });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err: any, decoded: any) => {
+    if (err) {
+      return res.status(403).json({ error: "Forbidden: Invalid token" });
+    }
+    (req as any).shopId = decoded.shopId;
+    next();
+  });
+};
+
 app.post("/api/auth/signup", async (req, res) => {
   try {
     const { shop_name, owner_name, email, password } = req.body;
@@ -104,17 +98,59 @@ app.post("/api/auth/signup", async (req, res) => {
   }
 });
 
-
-app.put("/api/customers/:id", async (req, res) => {
-  // TEMP: No auth required
-  const customerId = Number(req.params.id);
+app.post("/api/auth/login", async (req, res) => {
   try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password are required" });
+    }
+
+    const shop = await findShopByEmail(email);
+    if (!shop || !(await bcrypt.compare(password, shop.password_hash))) {
+      return res.status(401).json({ error: "Invalid email or password" });
+    }
+
+    const token = jwt.sign({ shopId: shop.id }, JWT_SECRET, { expiresIn: "7d" });
+    
+    res.cookie("token", token, { 
+      httpOnly: true, 
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
+
+    res.json({ 
+      message: "Login successful", 
+      token, 
+      shop: { id: shop.id, name: shop.shop_name, owner: shop.owner_name } 
+    });
+  } catch (error) {
+    res.status(400).json({ error: (error as Error).message });
+  }
+});
+
+app.get("/api/customers", authenticateToken, async (req: Request, res: Response) => {
+  const shopId = (req as any).shopId;
+  const customers = await listCustomers(shopId);
+  res.json(customers);
+});
+
+app.post("/api/customers", authenticateToken, async (req, res) => {
+  try {
+    const shopId = (req as any).shopId;
+    const customer = await addCustomer({ ...req.body, shop_id: shopId });
+    res.status(201).json(customer);
+  } catch (error) {
+    res.status(400).json({ error: (error as Error).message });
+  }
+});
+
+app.put("/api/customers/:id", authenticateToken, async (req, res) => {
+  try {
+    const shopId = (req as any).shopId;
     const customer = await updateCustomer({
-      id: customerId,
-      shop_id: 1, // Default to shopId 1 for demo
-      name: String(req.body?.name || ""),
-      phone: req.body?.phone ? String(req.body.phone) : null,
-      address: req.body?.address ? String(req.body.address) : null
+      ...req.body,
+      id: Number(req.params.id),
+      shop_id: shopId
     });
     res.json(customer);
   } catch (error) {
@@ -122,67 +158,68 @@ app.put("/api/customers/:id", async (req, res) => {
   }
 });
 
-app.get("/api/customers/:id/entries", async (req, res) => {
-  // TEMP: No auth required
-  const customerId = Number(req.params.id);
-  res.json(await getLedgerEntries(1, customerId)); // Default to shopId 1 for demo
+app.get("/api/ledger/:customerId", authenticateToken, async (req, res) => {
+  const shopId = (req as any).shopId;
+  const entries = await getLedgerEntries(shopId, Number(req.params.customerId));
+  res.json(entries);
 });
 
-app.post("/api/customers/:id/entries", async (req, res) => {
-  // TEMP: No auth required
-  const customerId = Number(req.params.id);
+app.post("/api/ledger", authenticateToken, async (req, res) => {
   try {
-    const entry = await addLedgerEntry({
-      shop_id: 1, // Default to shopId 1 for demo
-      customerId,
-      itemId: req.body?.itemId ? Number(req.body.itemId) : null,
-      itemName: String(req.body?.itemName || ""),
-      quantity: Number(req.body?.quantity || 0),
-      rate: req.body?.rate !== undefined ? Number(req.body.rate) : null,
-      unit: req.body?.unit ? String(req.body.unit) : null,
-      entryType: req.body?.entryType === "credit" ? "credit" : "debit",
-      affectsBalance: req.body?.affectsBalance !== false,
-      note: req.body?.note ? String(req.body.note) : undefined
-    });
+    const shopId = (req as any).shopId;
+    const entry = await addLedgerEntry({ ...req.body, shop_id: shopId });
     res.status(201).json(entry);
   } catch (error) {
     res.status(400).json({ error: (error as Error).message });
   }
 });
 
-app.delete("/api/customers/:customerId/entries/:entryId", async (req, res) => {
-  // TEMP: No auth required
+app.delete("/api/ledger/:id", authenticateToken, async (req, res) => {
   try {
-    await deleteLedgerEntry(1, Number(req.params.entryId)); // Default to shopId 1 for demo
-    res.status(204).end();
+    const shopId = (req as any).shopId;
+    await deleteLedgerEntry(shopId, Number(req.params.id));
+    res.status(204).send();
   } catch (error) {
     res.status(400).json({ error: (error as Error).message });
   }
 });
 
-app.get("/api/customers/:id/summary", async (req, res) => {
-  // TEMP: No auth required
-  res.json(await getCustomerSummary(1, Number(req.params.id)));
+app.get("/api/summary/:customerId", authenticateToken, async (req, res) => {
+  const shopId = (req as any).shopId;
+  const summary = await getCustomerSummary(shopId, Number(req.params.customerId));
+  res.json(summary);
 });
 
-app.get("/api/customers/:id/aging", async (req, res) => {
-  // TEMP: No auth required
-  res.json(await getLedgerAging(1, Number(req.params.id)));
+app.get("/api/aging/:customerId", authenticateToken, async (req, res) => {
+  const shopId = (req as any).shopId;
+  const aging = await getLedgerAging(shopId, Number(req.params.customerId));
+  res.json(aging);
 });
 
-app.get("/api/audit-logs", async (req, res) => {
-  // TEMP: No auth required
-  const limit = req.query.limit ? Number(req.query.limit) : 50;
-  res.json(await listAuditLogs(1, limit));
+app.get("/api/reports/aging", authenticateToken, async (req, res) => {
+  const shopId = (req as any).shopId;
+  const customers = await listCustomers(shopId);
+  const agingData = await Promise.all(
+    customers.map(async (c) => ({
+      customer: c,
+      aging: await getLedgerAging(shopId, c.id)
+    }))
+  );
+  res.json(agingData);
 });
 
-// CSV Export (Protected)
-app.get("/api/export/customers.csv", async (req, res) => {
-  // TEMP: No auth required
-  const customers = await listCustomers(1);
+app.get("/api/audit-logs", authenticateToken, async (req, res) => {
+  const shopId = (req as any).shopId;
+  const logs = await listAuditLogs(shopId);
+  res.json(logs);
+});
+
+app.get("/api/reports/customers/csv", authenticateToken, async (req, res) => {
+  const shopId = (req as any).shopId;
+  const customers = await listCustomers(shopId);
   const data = await Promise.all(
     customers.map(async (c: { id: number; name: string; phone: string | null; address: string | null }) => {
-      const s = await getCustomerSummary(1, c.id);
+      const s = await getCustomerSummary(shopId, c.id);
       return { ...c, ...s };
     })
   );
@@ -197,10 +234,10 @@ app.get("/api/export/customers.csv", async (req, res) => {
   res.send(csv);
 });
 
-app.get("/api/export/ledger/:customerId.csv", async (req, res) => {
-  // TEMP: No auth required
+app.get("/api/export/ledger/:customerId.csv", authenticateToken, async (req, res) => {
+  const shopId = (req as any).shopId;
   const customerId = Number(req.params.customerId);
-  const entries = await getLedgerEntries(1, customerId);
+  const entries = await getLedgerEntries(shopId, customerId);
   
   let csv = "Date,Type,Item,Quantity,Rate,Amount,Note\n";
   entries.forEach((row: { created_at: string; entry_type: string; item_name: string; quantity: number; rate: number | null; amount: number; note: string | null }) => {

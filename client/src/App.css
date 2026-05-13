@@ -5,14 +5,46 @@
 }
 
 .app-header {
-  padding: 24px;
+  padding: 16px 24px;
   background: #0f172a;
   color: #f8fafc;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.shop-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .app-header h1 {
-  margin: 0 0 6px;
-  font-size: 28px;
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.owner-badge {
+  font-size: 12px;
+  opacity: 0.8;
+  font-weight: 500;
+}
+
+.btn-logout {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 8px 16px;
+  font-size: 13px;
+  transition: all 0.2s;
+}
+
+.btn-logout:hover {
+  background: #ef4444;
+  border-color: #ef4444;
 }
 
 .layout {
