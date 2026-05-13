@@ -7,23 +7,17 @@ import cookieParser from "cookie-parser";
 import bcrypt from "bcryptjs";
 import {
   addCustomer,
-  addCategory,
-  addBrand,
-  addItem,
   addLedgerEntry,
   getCustomerSummary,
   getLedgerAging,
   getLedgerEntries,
   initDb,
   listAuditLogs,
-  listBrands,
-  listCategories,
   listCustomers,
   updateCustomer,
   deleteLedgerEntry,
   addShop,
-  findShopByEmail,
-  getAllItems
+  findShopByEmail
 } from "./db";
 
 const toCsvValue = (value: string | number | null): string => {
@@ -102,7 +96,7 @@ app.post("/api/auth/signup", async (req, res) => {
     }
 
     const password_hash = await bcrypt.hash(password, 10);
-    const shop = await addShop({ shop_name, owner_name, email, password_hash });
+    await addShop({ shop_name, owner_name, email, password_hash });
     
     res.status(201).json({ message: "Shop created successfully" });
   } catch (error) {
@@ -187,14 +181,14 @@ app.get("/api/export/customers.csv", async (req, res) => {
   // TEMP: No auth required
   const customers = await listCustomers(1);
   const data = await Promise.all(
-    customers.map(async (c: any) => {
+    customers.map(async (c: { id: number; name: string; phone: string | null; address: string | null }) => {
       const s = await getCustomerSummary(1, c.id);
       return { ...c, ...s };
     })
   );
 
   let csv = "ID,Name,Phone,Address,Total Debit,Total Credit,Balance\n";
-  data.forEach((row: any) => {
+  data.forEach((row: { id: number; name: string; phone: string | null; address: string | null; totalDebit: number; totalCredit: number; balance: number }) => {
     csv += `${row.id},${toCsvValue(row.name)},${toCsvValue(row.phone)},${toCsvValue(row.address)},${row.totalDebit},${row.totalCredit},${row.balance}\n`;
   });
 
@@ -209,7 +203,7 @@ app.get("/api/export/ledger/:customerId.csv", async (req, res) => {
   const entries = await getLedgerEntries(1, customerId);
   
   let csv = "Date,Type,Item,Quantity,Rate,Amount,Note\n";
-  entries.forEach((row: any) => {
+  entries.forEach((row: { created_at: string; entry_type: string; item_name: string; quantity: number; rate: number | null; amount: number; note: string | null }) => {
     csv += `${row.created_at},${row.entry_type},${toCsvValue(row.item_name)},${row.quantity},${row.rate || ""},${row.amount},${toCsvValue(row.note)}\n`;
   });
 
@@ -245,9 +239,13 @@ app.get("*", (req: Request, res: Response, next: NextFunction) => {
 
 app.use(express.static(clientDist));
 
-initDb().then(() => {
-  app.listen(port, () => {
-    console.log(`Server running at http://localhost:${port}`);
+if (process.env.NODE_ENV !== 'test') {
+  initDb().then(() => {
+    app.listen(port, () => {
+      console.log(`Server running at http://localhost:${port}`);
+    });
   });
-});
+}
+
+export { app };
 

@@ -1,7 +1,7 @@
 import Database from "better-sqlite3";
 import fs from "fs";
 import path from "path";
-import bcrypt from "bcryptjs";
+
 import type {
   AddBrandPayload,
   AddCategoryPayload,
@@ -262,13 +262,8 @@ export const addLedgerEntry = (payload: AddLedgerEntryPayload): LedgerEntry => {
     throw new Error("Quantity must be positive");
   }
 
-  const normalizedRate =
-    payload.rate !== undefined && payload.rate !== null && payload.rate !== 0
-      ? payload.rate
-      : null;
-  const amount = normalizedRate
-    ? Number(payload.quantity) * Number(normalizedRate)
-    : Number(payload.quantity);
+  const rate = (payload.rate !== undefined && payload.rate !== null) ? Number(payload.rate) : 0;
+  const amount = Number(payload.quantity) * rate;
 
   const entry = database.transaction(() => {
     const info = database
@@ -281,7 +276,7 @@ export const addLedgerEntry = (payload: AddLedgerEntryPayload): LedgerEntry => {
         payload.itemId ?? null,
         itemName,
         payload.quantity,
-        normalizedRate,
+        rate,
         amount,
         payload.unit ?? null,
         payload.entryType,
@@ -349,7 +344,7 @@ export const addCategory = (payload: AddCategoryPayload): Category => {
 export const listBrands = (shopId: number, categoryId?: number | null): Brand[] => {
   const database = getDb();
   let sql = "SELECT * FROM brands WHERE shop_id = ?";
-  const params: any[] = [shopId];
+  const params: (string | number | null)[] = [shopId];
   if (categoryId) {
     sql += " AND category_id = ?";
     params.push(categoryId);
@@ -370,7 +365,7 @@ export const addBrand = (payload: AddBrandPayload): Brand => {
 export const getAllItems = (filters: ItemFilters): Item[] => {
   const database = getDb();
   let sql = "SELECT * FROM items WHERE shop_id = ?";
-  const params: any[] = [filters.shop_id];
+  const params: (string | number | null)[] = [filters.shop_id];
   if (filters.categoryId) {
     sql += " AND category_id = ?";
     params.push(filters.categoryId);

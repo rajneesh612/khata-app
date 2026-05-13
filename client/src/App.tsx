@@ -325,6 +325,27 @@ function App() {
     if (!customerName.trim()) {
       return
     }
+
+    const isDuplicate = customers.some(
+      (c) =>
+        c.name.toLowerCase() === customerName.trim().toLowerCase() &&
+        (c.phone || '') === customerPhone.trim()
+    )
+
+    if (isDuplicate) {
+      alert('This customer already exists with the same name and phone number!')
+      return
+    }
+
+    const isPhoneDuplicate = customerPhone.trim() !== '' && customers.some(
+      (c) => (c.phone || '') === customerPhone.trim()
+    )
+
+    if (isPhoneDuplicate) {
+      alert('This phone number already exists!')
+      return
+    }
+
     try {
       await api.post('/customers', { name: customerName, phone: customerPhone, address: customerAddress })
       setCustomerName('')
@@ -532,7 +553,7 @@ function App() {
             <TextField
               label="Phone (optional)"
               value={customerPhone}
-              onChange={setCustomerPhone}
+              onChange={(val) => setCustomerPhone(val.replace(/\D/g, ''))}
               placeholder="Phone"
             />
             <TextField
@@ -722,7 +743,7 @@ function App() {
                   <TextField
                     label="Phone"
                     value={editCustomerPhone}
-                    onChange={setEditCustomerPhone}
+                    onChange={(val) => setEditCustomerPhone(val.replace(/\D/g, ''))}
                     placeholder="Phone"
                   />
                   <TextField

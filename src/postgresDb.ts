@@ -523,13 +523,8 @@ export const addLedgerEntry = async (
     throw new Error("Quantity must be positive");
   }
 
-  const normalizedRate =
-    payload.rate !== undefined && payload.rate !== null && payload.rate !== 0
-      ? payload.rate
-      : null;
-  const amount = normalizedRate
-    ? Number(payload.quantity) * Number(normalizedRate)
-    : Number(payload.quantity);
+  const rate = (payload.rate !== undefined && payload.rate !== null) ? Number(payload.rate) : 0;
+  const amount = Number(payload.quantity) * rate;
 
   const client = await getPool().connect();
 
@@ -585,7 +580,7 @@ export const addLedgerEntry = async (
         payload.itemId ?? null,
         itemName,
         payload.quantity,
-        normalizedRate,
+        rate,
         amount,
         payload.unit ?? null,
         payload.entryType,
