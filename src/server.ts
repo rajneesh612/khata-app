@@ -5,7 +5,7 @@ import cors from "cors";
 import path from "path";
 import cookieParser from "cookie-parser";
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
+import jwt, { JwtPayload } from "jsonwebtoken";
 import {
   addCustomer,
   addLedgerEntry,
@@ -18,7 +18,8 @@ import {
   updateCustomer,
   deleteLedgerEntry,
   addShop,
-  findShopByEmail
+  findShopByEmail,
+  Customer
 } from "./db";
 
 const toCsvValue = (value: string | number | null): string => {
@@ -61,18 +62,22 @@ app.use(
 // Auth Routes
 const JWT_SECRET = process.env.JWT_SECRET || "super-secret-khata-key";
 
-const authenticateToken = (req: Request, res: Response, next: NextFunction) => {
+interface AuthRequest extends Request {
+  shopId?: number;
+}
+
+const authenticateToken = (req: AuthRequest, res: Response, next: NextFunction) => {
   const token = req.cookies.token || req.headers['authorization']?.split(' ')[1];
 
   if (!token) {
     return res.status(401).json({ error: "Unauthorized: No token provided" });
   }
 
-  jwt.verify(token, JWT_SECRET, (err: any, decoded: any) => {
-    if (err) {
+  jwt.verify(token, JWT_SECRET, (err: jwt.VerifyErrors | null, decoded: string | JwtPayload | undefined) => {
+    if (err || !decoded) {
       return res.status(403).json({ error: "Forbidden: Invalid token" });
     }
-    (req as any).shopId = decoded.shopId;
+    req.shopId = (decoded as JwtPayload).shopId;
     next();
   });
 };
@@ -128,15 +133,15 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
-app.get("/api/customers", authenticateToken, async (req: Request, res: Response) => {
-  const shopId = (req as any).shopId;
+app.get("/api/customers", authenticateToken, async (req: AuthRequest, res: Response) => {
+  const shopId = req.shopId!;
   const customers = await listCustomers(shopId);
   res.json(customers);
 });
 
-app.post("/api/customers", authenticateToken, async (req, res) => {
+app.post("/api/customers", authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const shopId = (req as any).shopId;
+    const shopId = req.shopId!;
     const customer = await addCustomer({ ...req.body, shop_id: shopId });
     res.status(201).json(customer);
   } catch (error) {
@@ -144,9 +149,9 @@ app.post("/api/customers", authenticateToken, async (req, res) => {
   }
 });
 
-app.put("/api/customers/:id", authenticateToken, async (req, res) => {
+app.put("/api/customers/:id", authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const shopId = (req as any).shopId;
+    const shopId = req.shopId!;
     const customer = await updateCustomer({
       ...req.body,
       id: Number(req.params.id),
@@ -158,15 +163,15 @@ app.put("/api/customers/:id", authenticateToken, async (req, res) => {
   }
 });
 
-app.get("/api/ledger/:customerId", authenticateToken, async (req, res) => {
-  const shopId = (req as any).shopId;
+app.get("/api/ledger/:customerId", authenticateToken, async (req: AuthRequest, res) => {
+  const shopId = req.shopId!;
   const entries = await getLedgerEntries(shopId, Number(req.params.customerId));
   res.json(entries);
 });
 
-app.post("/api/ledger", authenticateToken, async (req, res) => {
+app.post("/api/ledger", authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const shopId = (req as any).shopId;
+    const shopId = req.shopId!;
     const entry = await addLedgerEntry({ ...req.body, shop_id: shopId });
     res.status(201).json(entry);
   } catch (error) {
@@ -174,9 +179,9 @@ app.post("/api/ledger", authenticateToken, async (req, res) => {
   }
 });
 
-app.delete("/api/ledger/:id", authenticateToken, async (req, res) => {
+app.delete("/api/ledger/:id", authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const shopId = (req as any).shopId;
+    const shopId = req.shopId!;
     await deleteLedgerEntry(shopId, Number(req.params.id));
     res.status(204).send();
   } catch (error) {
@@ -184,23 +189,23 @@ app.delete("/api/ledger/:id", authenticateToken, async (req, res) => {
   }
 });
 
-app.get("/api/summary/:customerId", authenticateToken, async (req, res) => {
-  const shopId = (req as any).shopId;
+app.get("/api/summary/:customerId", authenticateToken, async (req: AuthRequest, res) => {
+  const shopId = req.shopId!;
   const summary = await getCustomerSummary(shopId, Number(req.params.customerId));
   res.json(summary);
 });
 
-app.get("/api/aging/:customerId", authenticateToken, async (req, res) => {
-  const shopId = (req as any).shopId;
+app.get("/api/aging/:customerId", authenticateToken, async (req: AuthRequest, res) => {
+  const shopId = req.shopId!;
   const aging = await getLedgerAging(shopId, Number(req.params.customerId));
   res.json(aging);
 });
 
-app.get("/api/reports/aging", authenticateToken, async (req, res) => {
-  const shopId = (req as any).shopId;
+app.get("/api/reports/aging", authenticateToken, async (req: AuthRequest, res) => {
+  const shopId = req.shopId!;
   const customers = await listCustomers(shopId);
   const agingData = await Promise.all(
-    customers.map(async (c) => ({
+    customers.map(async (c: Customer) => ({
       customer: c,
       aging: await getLedgerAging(shopId, c.id)
     }))
@@ -208,14 +213,14 @@ app.get("/api/reports/aging", authenticateToken, async (req, res) => {
   res.json(agingData);
 });
 
-app.get("/api/audit-logs", authenticateToken, async (req, res) => {
-  const shopId = (req as any).shopId;
+app.get("/api/audit-logs", authenticateToken, async (req: AuthRequest, res) => {
+  const shopId = req.shopId!;
   const logs = await listAuditLogs(shopId);
   res.json(logs);
 });
 
-app.get("/api/reports/customers/csv", authenticateToken, async (req, res) => {
-  const shopId = (req as any).shopId;
+app.get("/api/reports/customers/csv", authenticateToken, async (req: AuthRequest, res) => {
+  const shopId = req.shopId!;
   const customers = await listCustomers(shopId);
   const data = await Promise.all(
     customers.map(async (c: { id: number; name: string; phone: string | null; address: string | null }) => {
@@ -234,8 +239,8 @@ app.get("/api/reports/customers/csv", authenticateToken, async (req, res) => {
   res.send(csv);
 });
 
-app.get("/api/export/ledger/:customerId.csv", authenticateToken, async (req, res) => {
-  const shopId = (req as any).shopId;
+app.get("/api/export/ledger/:customerId.csv", authenticateToken, async (req: AuthRequest, res) => {
+  const shopId = req.shopId!;
   const customerId = Number(req.params.customerId);
   const entries = await getLedgerEntries(shopId, customerId);
   
